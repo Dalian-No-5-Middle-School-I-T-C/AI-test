@@ -29,24 +29,28 @@ function generateId(): string {
   return `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 }
 
+interface DeltaToolFunction {
+  name?: string;
+  arguments?: string;
+}
+
 interface DeltaToolCall {
   index?: number;
   id?: string;
   type?: string;
-  function?: {
-    name?: string;
-    arguments?: string;
-  };
+  function?: DeltaToolFunction;
+}
+
+interface StreamDelta {
+  role?: string;
+  content?: string;
+  reasoning_content?: string;
+  tool_calls?: DeltaToolCall[];
 }
 
 interface StreamChunkChoice {
   index: number;
-  delta?: {
-    role?: string;
-    content?: string;
-    reasoning_content?: string;
-    tool_calls?: DeltaToolCall[];
-  };
+  delta?: StreamDelta;
   finish_reason?: string | null;
 }
 
