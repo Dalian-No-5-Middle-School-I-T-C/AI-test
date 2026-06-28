@@ -1,33 +1,26 @@
-import { describe, beforeAll, beforeEach, afterEach, afterAll, it, expect } from '@ohos/hypium';
+import { describe, it, expect } from '@ohos/hypium';
+import { ToolService } from '../main/ets/services/ToolService';
 
 export default function localUnitTest() {
-  describe('localUnitTest', () => {
-    // Defines a test suite. Two parameters are supported: test suite name and test suite function.
-    beforeAll(() => {
-      // Presets an action, which is performed only once before all test cases of the test suite start.
-      // This API supports only one parameter: preset action function.
+  describe('ToolServiceTest', () => {
+    it('getToolDefinitions_shouldIncludeGetCurrentTime', 0, () => {
+      let tools = ToolService.getToolDefinitions();
+      expect(tools.length).assertEqual(1);
+      expect(tools[0].function.name).assertEqual('get_current_time');
     });
-    beforeEach(() => {
-      // Presets an action, which is performed before each unit test case starts.
-      // The number of execution times is the same as the number of test cases defined by **it**.
-      // This API supports only one parameter: preset action function.
+
+    it('executeTool_getCurrentTime_shouldReturnValidJson', 0, () => {
+      let result = ToolService.executeTool('get_current_time', '{}');
+      expect(result.length).assertLarger(0);
+      let parsed = JSON.parse(result) as Record<string, Object>;
+      expect(parsed['time'] !== undefined).assertTrue();
+      expect(parsed['timestamp'] !== undefined).assertTrue();
     });
-    afterEach(() => {
-      // Presets a clear action, which is performed after each unit test case ends.
-      // The number of execution times is the same as the number of test cases defined by **it**.
-      // This API supports only one parameter: clear action function.
-    });
-    afterAll(() => {
-      // Presets a clear action, which is performed after all test cases of the test suite end.
-      // This API supports only one parameter: clear action function.
-    });
-    it('assertContain', 0, () => {
-      // Defines a test case. This API supports three parameters: test case name, filter parameter, and test case function.
-      let a = 'abc';
-      let b = 'b';
-      // Defines a variety of assertion methods, which are used to declare expected boolean conditions.
-      expect(a).assertContain(b);
-      expect(a).assertEqual(a);
+
+    it('executeTool_unknownTool_shouldReturnError', 0, () => {
+      let result = ToolService.executeTool('unknown_tool', '{}');
+      let parsed = JSON.parse(result) as Record<string, Object>;
+      expect((parsed['error'] as string).includes('Unknown tool')).assertTrue();
     });
   });
 }
