@@ -1,15 +1,29 @@
-export const TimeToolDefinition = {
-  type: 'function',
-  function: {
-    name: 'get_current_time',
-    description: 'Get the current mobile device system date and time.',
-    parameters: {
-      type: 'object',
-      properties: {},
-      required: []
-    }
-  }
-};
+export class FunctionParameters {
+  type: string = 'object';
+  properties: Record<string, Object> = {};
+  required: string[] = [];
+}
+
+export class FunctionDefinition {
+  name: string = 'get_current_time';
+  description: string = 'Get the current mobile device system date and time.';
+  parameters: FunctionParameters = new FunctionParameters();
+}
+
+export class ToolDefinition {
+  type: string = 'function';
+  function: FunctionDefinition = new FunctionDefinition();
+}
+
+export const TimeToolDefinition = new ToolDefinition();
+
+export class TimeToolResult {
+  status: string = '';
+  message?: string;
+  current_time?: string;
+  day_of_week?: string;
+  timezone_offset?: number;
+}
 
 export function executeTimeTool(): string {
   try {
@@ -25,16 +39,17 @@ export function executeTimeTool(): string {
     const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const dayOfWeek = days[now.getDay()];
 
-    return JSON.stringify({
-      status: 'success',
-      current_time: `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`,
-      day_of_week: dayOfWeek,
-      timezone_offset: now.getTimezoneOffset()
-    });
+    const res = new TimeToolResult();
+    res.status = 'success';
+    res.current_time = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+    res.day_of_week = dayOfWeek;
+    res.timezone_offset = now.getTimezoneOffset();
+
+    return JSON.stringify(res);
   } catch (e) {
-    return JSON.stringify({
-      status: 'error',
-      message: `Failed to retrieve system time: ${JSON.stringify(e)}`
-    });
+    const res = new TimeToolResult();
+    res.status = 'error';
+    res.message = `Failed to retrieve system time: ${JSON.stringify(e)}`;
+    return JSON.stringify(res);
   }
 }

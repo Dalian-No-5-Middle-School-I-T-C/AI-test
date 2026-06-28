@@ -313,7 +313,6 @@ struct Index {
                   .borderRadius(6)
                   .backgroundColor('transparent')
                   .onClick((e: ClickEvent) => {
-                    e.stopPropagation();
                     this.deleteSession(session.id);
                   })
                 }
@@ -615,17 +614,24 @@ struct Index {
 
   // Helper to check collapsed status
   private isCollapsed(id: string): boolean {
-    if (this.collapsedThinking[id] === undefined) {
+    const val = this.collapsedThinking[id];
+    if (val === undefined || val === null) {
       // Default: streaming thinking is expanded, finished thoughts are collapsed
       return id !== 'streaming_reasoning';
     }
-    return this.collapsedThinking[id];
+    return val as boolean;
   }
 
   // Toggle collapsed status
   private toggleCollapsed(id: string): void {
-    const updated = { ...this.collapsedThinking };
-    updated[id] = !this.isCollapsed(id);
+    const currentStatus = this.isCollapsed(id);
+    const updated: Record<string, boolean> = {};
+    const keys = Object.keys(this.collapsedThinking);
+    for (let i = 0; i < keys.length; i++) {
+       const key = keys[i];
+       updated[key] = this.collapsedThinking[key];
+    }
+    updated[id] = !currentStatus;
     this.collapsedThinking = updated;
   }
 }

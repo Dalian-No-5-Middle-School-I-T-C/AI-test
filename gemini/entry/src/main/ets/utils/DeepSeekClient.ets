@@ -30,40 +30,43 @@ export class DeepSeekClient {
 
     // Prepare message payload according to OpenAI/DeepSeek schema
     const apiMessages: Record<string, Object>[] = historyMessages.map(msg => {
-      const item: Record<string, Object> = {
-        role: msg.role,
-        content: msg.content
-      };
+      const item: Record<string, Object> = {};
+      item['role'] = msg.role;
+      item['content'] = msg.content;
+
       if (msg.reasoning_content !== undefined) {
-        item.reasoning_content = msg.reasoning_content;
+        item['reasoning_content'] = msg.reasoning_content;
       }
       if (msg.tool_calls !== undefined) {
-        item.tool_calls = msg.tool_calls as Object[];
+        item['tool_calls'] = msg.tool_calls as Object[];
       }
       if (msg.tool_call_id !== undefined) {
-        item.tool_call_id = msg.tool_call_id;
+        item['tool_call_id'] = msg.tool_call_id;
       }
       if (msg.name !== undefined) {
-        item.name = msg.name;
+        item['name'] = msg.name;
       }
       return item;
     });
 
-    const requestBody: Record<string, Object> = {
-      model: this.settings.model,
-      messages: apiMessages,
-      stream: true,
-      reasoning_effort: this.settings.reasoningEffort
-    };
+    const requestBody: Record<string, Object> = {};
+    requestBody['model'] = this.settings.model;
+    requestBody['messages'] = apiMessages;
+    requestBody['stream'] = true;
+    requestBody['reasoning_effort'] = this.settings.reasoningEffort;
 
     if (this.settings.thinkingEnabled) {
-      requestBody.thinking = { type: 'enabled' };
+      const thinkingConfig: Record<string, Object> = {};
+      thinkingConfig['type'] = 'enabled';
+      requestBody['thinking'] = thinkingConfig;
     } else {
-      requestBody.thinking = { type: 'disabled' };
+      const thinkingConfig: Record<string, Object> = {};
+      thinkingConfig['type'] = 'disabled';
+      requestBody['thinking'] = thinkingConfig;
     }
 
     if (this.settings.toolsEnabled) {
-      requestBody.tools = [TimeToolDefinition];
+      requestBody['tools'] = [TimeToolDefinition];
     }
 
     let url = this.settings.baseUrl;

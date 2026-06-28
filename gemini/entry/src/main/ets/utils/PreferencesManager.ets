@@ -46,15 +46,7 @@ export class PreferencesManager {
   static saveSettings(context: common.Context, settings: AppSettings): void {
     try {
       const prefs = PreferencesManager.getPrefs(context);
-      const record: Record<string, Object> = {
-        apiKey: settings.apiKey,
-        baseUrl: settings.baseUrl,
-        model: settings.model,
-        thinkingEnabled: settings.thinkingEnabled,
-        reasoningEffort: settings.reasoningEffort,
-        toolsEnabled: settings.toolsEnabled
-      };
-      prefs.putSync(PreferencesManager.KEY_SETTINGS, JSON.stringify(record));
+      prefs.putSync(PreferencesManager.KEY_SETTINGS, JSON.stringify(settings));
       prefs.flushSync();
     } catch (e) {
       console.error('[Prefs] Error saving settings', JSON.stringify(e));
