@@ -17,11 +17,15 @@ import { ToolService } from './ToolService';
 
 const TEXT_DECODER = util.TextDecoder.create('utf-8', { ignoreBOM: true });
 
+interface ThinkingConfig {
+  type: string;
+}
+
 interface RequestBody {
   model: string;
   messages: ApiMessage[];
   stream: boolean;
-  thinking?: Record<string, string>;
+  thinking?: ThinkingConfig;
   reasoning_effort?: string;
   tools?: ToolDefinition[];
   tool_choice?: string;
@@ -57,7 +61,7 @@ export class DeepSeekService {
       stream: true
     };
     if (thinkingEnabled) {
-      const thinkingObj: Record<string, string> = { type: 'enabled' };
+      const thinkingObj: ThinkingConfig = { type: 'enabled' };
       body.thinking = thinkingObj;
       body.reasoning_effort = reasoningEffort;
     }
@@ -206,12 +210,6 @@ export class DeepSeekService {
     });
 
     httpRequest.on('dataEnd', () => {
-      httpRequest.destroy();
-      onComplete();
-    });
-
-    httpRequest.on('dataReceiveError', (err: Error) => {
-      onError('Stream error: ' + err.message);
       httpRequest.destroy();
       onComplete();
     });
