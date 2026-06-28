@@ -1,6 +1,7 @@
 import { AbilityConstant, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
+import { storageService } from '../service/StorageService';
 
 const DOMAIN = 0x0000;
 
@@ -11,6 +12,11 @@ export default class EntryAbility extends UIAbility {
     } catch (err) {
       hilog.error(DOMAIN, 'testTag', 'Failed to set colorMode. Cause: %{public}s', JSON.stringify(err));
     }
+    storageService.init(this.context).then(() => {
+      hilog.info(DOMAIN, 'testTag', 'StorageService initialized');
+    }).catch((err: Error) => {
+      hilog.error(DOMAIN, 'testTag', 'StorageService init failed: %{public}s', JSON.stringify(err));
+    });
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onCreate');
   }
 
