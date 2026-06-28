@@ -1,0 +1,92 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "DeepSeek AI Chat"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "DeepSeek AI Chat Application"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "DS Chat"
+    },
+    {
+      "name": "app_name",
+      "value": "DS Chat"
+    },
+    {
+      "name": "chat_title",
+      "value": "DeepSeek Chat"
+    },
+    {
+      "name": "settings_title",
+      "value": "Settings"
+    },
+    {
+      "name": "api_key_label",
+      "value": "API Key"
+    },
+    {
+      "name": "api_key_placeholder",
+      "value": "Enter your DeepSeek API Key..."
+    },
+    {
+      "name": "model_label",
+      "value": "Model"
+    },
+    {
+      "name": "model_flash",
+      "value": "deepseek-v4-flash"
+    },
+    {
+      "name": "model_pro",
+      "value": "deepseek-v4-pro"
+    },
+    {
+      "name": "thinking_label",
+      "value": "Thinking Mode"
+    },
+    {
+      "name": "thinking_off",
+      "value": "Off"
+    },
+    {
+      "name": "thinking_high",
+      "value": "High"
+    },
+    {
+      "name": "thinking_max",
+      "value": "Max"
+    },
+    {
+      "name": "send_btn",
+      "value": "Send"
+    },
+    {
+      "name": "clear_history_btn",
+      "value": "Clear History"
+    },
+    {
+      "name": "history_title",
+      "value": "Chat History"
+    },
+    {
+      "name": "empty_history",
+      "value": "No chat history yet"
+    },
+    {
+      "name": "thinking_content",
+      "value": "Thinking"
+    },
+    {
+      "name": "tool_time_title",
+      "value": "System Time Tool"
+    },
+    {
+      "name": "tool_time_desc",
+      "value": "Returns current system time"
+    }
+  ]
+}

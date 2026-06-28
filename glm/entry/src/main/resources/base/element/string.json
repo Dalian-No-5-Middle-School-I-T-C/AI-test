@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "DeepSeek AI 聊天模块"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "DeepSeek 聊天"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "DeepSeek 聊天"
+    }
+  ]
+}

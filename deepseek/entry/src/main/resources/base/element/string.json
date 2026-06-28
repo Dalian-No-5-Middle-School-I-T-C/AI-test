@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "DeepSeek AI Chat"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "DeepSeek AI Chat"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "DeepSeek Chat"
+    }
+  ]
+}
