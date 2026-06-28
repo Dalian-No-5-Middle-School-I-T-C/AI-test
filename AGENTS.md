@@ -6,7 +6,9 @@
 This repo is an **AI model evaluation harness**, not a single deployable app. Each top-level directory (`claude`, `composer`, `deepseek`, `doubao`, `ernie`, `gemini`, `glm`, `gpt`, `kimi`, `mimo`, `minimax`, `qwen`) is an **independent, standalone HarmonyOS (ArkTS) DevEco project** — all 12 are different model implementations of the same task described in `question.md` (a DeepSeek AI chat phone app). They do not depend on each other. The acceptance gate per `README.md` is: the project compiles under hvigor, then the app runs.
 
 ### Toolchain (already installed in the VM snapshot)
-HarmonyOS command-line-tools **6.1.0.830 (SDK API 23 / HarmonyOS 6.1.0, hvigor 6.23.5, ohpm 6.1.1.830, codelinter 6.0.240)** live at `/home/ubuntu/command-line-tools`. They are put on `PATH` via `~/.bashrc` (which also sets `DEVECO_SDK_HOME=/home/ubuntu/command-line-tools/sdk`). A fresh login shell can run `hvigorw`, `ohpm`, and `codelinter` directly. The bundled Node (v18) used by the tools is separate from the system Node.
+HarmonyOS command-line-tools **6.1.0.830 (SDK API 23 / HarmonyOS 6.1.0, hvigor 6.23.5, ohpm 6.1.1.830, codelinter 6.0.240, hdc 3.2.0c)** live at `/home/ubuntu/command-line-tools`. `~/.bashrc` puts only `/home/ubuntu/command-line-tools/bin` on `PATH` and sets `DEVECO_SDK_HOME=/home/ubuntu/command-line-tools/sdk`, so a fresh login shell can run `hvigorw`, `ohpm`, `codelinter`, and `hstack` directly.
+
+- The tools bundle their own Node (v18) under `tool/node`, and the `hvigorw`/`ohpm` wrappers self-resolve it via `DEVECO_NODE_HOME`. We deliberately do NOT add `tool/node/bin` to `PATH`, so the default `node` in a shell stays the system nvm Node (v22); adding it would shadow the system Node. You do not need to set `NODE_HOME`/`DEVECO_NODE_HOME` manually.
 
 - The projects pin hvigor `modelVersion: 6.1.0` and `compatibleSdkVersion: 6.1.0(23)`. They will NOT build with older command-line-tools (e.g. the publicly mirrored `6.0.1`), which fail with `Unsupported modelVersion of Hvigor 6.1.0` / missing API 23. The 6.1.0 toolchain is required and is what is installed.
 
