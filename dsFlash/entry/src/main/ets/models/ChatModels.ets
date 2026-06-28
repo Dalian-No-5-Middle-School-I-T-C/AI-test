@@ -27,10 +27,21 @@ export interface ChatMessage {
   toolCalls?: ToolCall[];
 }
 
+export interface ToolParamProperty {
+  type?: string;
+  description?: string;
+}
+
+export interface ToolParameters {
+  type: string;
+  properties: Record<string, ToolParamProperty>;
+  required: string[];
+}
+
 export interface ToolFunctionDef {
   name: string;
   description: string;
-  parameters: object;
+  parameters: ToolParameters;
 }
 
 export interface ToolDefinition {

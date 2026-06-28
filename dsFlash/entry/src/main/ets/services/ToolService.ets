@@ -1,15 +1,16 @@
-import { ToolDefinition, ToolFunctionDef } from '../models/ChatModels';
+import { ToolDefinition, ToolFunctionDef, ToolParameters } from '../models/ChatModels';
 
 export class ToolService {
   static getToolDefinitions(): ToolDefinition[] {
+    const params: ToolParameters = {
+      type: 'object',
+      properties: {},
+      required: []
+    };
     const func: ToolFunctionDef = {
       name: 'get_system_time',
       description: 'Get the current system date and time of the phone',
-      parameters: {
-        type: 'object',
-        properties: {},
-        required: []
-      }
+      parameters: params
     };
     const def: ToolDefinition = {
       type: 'function',
@@ -26,16 +27,15 @@ export class ToolService {
   }
 
   private static getSystemTime(): string {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = (now.getMonth() + 1).toString().padStart(2, '0');
-    const day = now.getDate().toString().padStart(2, '0');
-    const hours = now.getHours().toString().padStart(2, '0');
-    const minutes = now.getMinutes().toString().padStart(2, '0');
-    const seconds = now.getSeconds().toString().padStart(2, '0');
+    const now: Date = new Date();
+    const year: string = now.getFullYear().toString();
+    const month: string = (now.getMonth() + 1).toString().padStart(2, '0');
+    const day: string = now.getDate().toString().padStart(2, '0');
+    const hours: string = now.getHours().toString().padStart(2, '0');
+    const minutes: string = now.getMinutes().toString().padStart(2, '0');
+    const seconds: string = now.getSeconds().toString().padStart(2, '0');
     const weekDays: string[] = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const weekDay = weekDays[now.getDay()];
-    const result = 'Current system time: ' + year + '-' + month + '-' + day + ' ' + hours + ':' + minutes + ':' + seconds + ' (' + weekDay + ')';
-    return result;
+    const weekDay: string = weekDays[now.getDay()];
+    return 'Current system time: ' + year + '-' + month + '-' + day + ' ' + hours + ':' + minutes + ':' + seconds + ' (' + weekDay + ')';
   }
 }

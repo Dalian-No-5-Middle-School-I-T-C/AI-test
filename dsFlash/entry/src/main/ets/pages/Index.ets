@@ -576,8 +576,7 @@ struct Index {
                 this.inputText = value;
               })
               .layoutWeight(1)
-              .constraintSize({ minHeight: 40 })
-              .maxHeight(120)
+              .constraintSize({ minHeight: 40, maxHeight: 120 })
               .backgroundColor('#f5f5f5')
               .borderRadius(20)
               .padding({ left: 16, right: 16 })
