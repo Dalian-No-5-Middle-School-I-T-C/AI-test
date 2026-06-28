@@ -1,5 +1,4 @@
-import { router } from '@kit.AbilityKit';
-import { PersistentStorage } from '@kit.ArkUI';
+import router from '@ohos.router';
 import {
   MODEL_FLASH,
   MODEL_PRO,
@@ -50,7 +49,7 @@ struct Index {
 
   loadSessions(): void {
     try {
-      const parsed = JSON.parse(this.sessionsJson);
+      const parsed: object = JSON.parse(this.sessionsJson);
       if (Array.isArray(parsed)) {
         this.sessions = parsed as ChatSession[];
       }
@@ -81,7 +80,7 @@ struct Index {
   }
 
   switchSession(sessionId: string): void {
-    const session = this.sessions.find(s => s.id === sessionId);
+    const session: ChatSession | undefined = this.findSession(sessionId);
     if (session) {
       this.currentSessionId = session.id;
       this.messages = session.messages.slice();
@@ -92,8 +91,23 @@ struct Index {
     }
   }
 
+  findSession(sessionId: string): ChatSession | undefined {
+    for (const s of this.sessions) {
+      if (s.id === sessionId) {
+        return s;
+      }
+    }
+    return undefined;
+  }
+
   deleteSession(sessionId: string): void {
-    this.sessions = this.sessions.filter(s => s.id !== sessionId);
+    const newSessions: ChatSession[] = [];
+    for (const s of this.sessions) {
+      if (s.id !== sessionId) {
+        newSessions.push(s);
+      }
+    }
+    this.sessions = newSessions;
     this.saveSessions();
     if (this.currentSessionId === sessionId) {
       this.startNewSession();
@@ -103,7 +117,10 @@ struct Index {
   getSessionTitle(messages: ChatMessage[]): string {
     for (const msg of messages) {
       if (msg.role === MessageRole.USER && msg.content.length > 0) {
-        return msg.content.length > 40 ? msg.content.slice(0, 40) + '...' : msg.content;
+        if (msg.content.length > 40) {
+          return msg.content.slice(0, 40) + '...';
+        }
+        return msg.content;
       }
     }
     return 'New Chat';
@@ -113,9 +130,9 @@ struct Index {
     if (this.messages.length <= 1) {
       return;
     }
-    const title = this.getSessionTitle(this.messages);
-    const now = Date.now();
-    const existing = this.sessions.findIndex(s => s.id === this.currentSessionId);
+    const title: string = this.getSessionTitle(this.messages);
+    const now: number = Date.now();
+    const existing: number = this.findSessionIndex(this.currentSessionId);
     const session: ChatSession = {
       id: this.currentSessionId,
       title: title,
@@ -137,46 +154,61 @@ struct Index {
     this.saveSessions();
   }
 
+  findSessionIndex(sessionId: string): number {
+    for (let i: number = 0; i < this.sessions.length; i++) {
+      if (this.sessions[i].id === sessionId) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
   buildApiMessages(): ApiMessage[] {
     const result: ApiMessage[] = [];
     for (const msg of this.messages) {
       if (msg.role === MessageRole.SYSTEM) {
-        result.push({ role: 'system', content: msg.content });
+        const apiMsg: ApiMessage = { role: 'system', content: msg.content };
+        result.push(apiMsg);
       } else if (msg.role === MessageRole.USER) {
-        result.push({ role: 'user', content: msg.content });
+        const apiMsg: ApiMessage = { role: 'user', content: msg.content };
+        result.push(apiMsg);
       } else if (msg.role === MessageRole.ASSISTANT) {
         if (msg.toolCalls && msg.toolCalls.length > 0) {
-          result.push({
+          const apiMsg: ApiMessage = {
             role: 'assistant',
             content: msg.content || '',
             tool_calls: msg.toolCalls
-          });
+          };
+          result.push(apiMsg);
         } else {
-          result.push({ role: 'assistant', content: msg.content });
+          const apiMsg: ApiMessage = { role: 'assistant', content: msg.content };
+          result.push(apiMsg);
         }
       } else if (msg.role === MessageRole.TOOL) {
-        result.push({
+        const apiMsg: ApiMessage = {
           role: 'tool',
           content: msg.content,
           tool_call_id: msg.toolCallId || ''
-        });
+        };
+        result.push(apiMsg);
       }
     }
     return result;
   }
 
   sendMessage(): void {
-    const text = this.inputText.trim();
+    const text: string = this.inputText.trim();
     if (!text || this.isStreaming) {
       return;
     }
     if (!this.apiKey) {
-      this.messages.push({
+      const errMsg: ChatMessage = {
         id: generateId(),
         role: MessageRole.ASSISTANT,
         content: 'Please set your DeepSeek API Key first. Go to Settings to configure it.',
         timestamp: Date.now()
-      });
+      };
+      this.messages.push(errMsg);
       return;
     }
 
@@ -194,12 +226,12 @@ struct Index {
   }
 
   async streamWithToolLoop(): Promise<void> {
-    let keepLooping = true;
+    let keepLooping: boolean = true;
 
     while (keepLooping) {
       keepLooping = false;
 
-      const assistantId = generateId();
+      const assistantId: string = generateId();
       const assistantMsg: ChatMessage = {
         id: assistantId,
         role: MessageRole.ASSISTANT,
@@ -209,7 +241,7 @@ struct Index {
       };
       this.messages.push(assistantMsg);
 
-      const currentApiMessages = this.buildApiMessages();
+      const currentApiMessages: ApiMessage[] = this.buildApiMessages();
       this.isStreaming = true;
       this.currentThinking = '';
       this.currentContent = '';
@@ -218,17 +250,17 @@ struct Index {
       let toolCallResults: ToolCallInfo[] = [];
       let streamError: string = '';
 
-      const service = new DeepSeekService(this.apiKey);
+      const service: DeepSeekService = new DeepSeekService(this.apiKey);
 
-      await new Promise<void>((resolve) => {
+      await new Promise<void>((resolve: () => void) => {
         service.streamChat(
           this.currentModel,
           currentApiMessages,
           this.thinkingEnabled,
           this.reasoningEffort,
           (thinking: string) => {
-            assistantMsg.thinkingContent += thinking;
-            this.currentThinking = assistantMsg.thinkingContent;
+            assistantMsg.thinkingContent = (assistantMsg.thinkingContent || '') + thinking;
+            this.currentThinking = assistantMsg.thinkingContent || '';
             this.messages = [...this.messages];
             this.scrollToBottom();
           },
@@ -265,14 +297,22 @@ struct Index {
 
       // Handle tool calls
       if (toolCallResults.length > 0) {
-        assistantMsg.toolCalls = toolCallResults.map(tc => ({
-          id: tc.id,
-          type: tc.type,
-          function: { name: tc.functionName, arguments: tc.functionArguments }
-        }));
+        const toolCallsForMsg: ToolCall[] = [];
+        for (const tc of toolCallResults) {
+          const t: ToolCall = {
+            id: tc.id,
+            type: tc.type,
+            function: {
+              name: tc.functionName,
+              arguments: tc.functionArguments
+            }
+          };
+          toolCallsForMsg.push(t);
+        }
+        assistantMsg.toolCalls = toolCallsForMsg;
 
         for (const tc of toolCallResults) {
-          const result = ToolService.executeTool(tc.functionName, tc.functionArguments);
+          const result: string = ToolService.executeTool(tc.functionName, tc.functionArguments);
 
           const toolCallEntry: ChatMessage = {
             id: generateId(),
@@ -282,7 +322,10 @@ struct Index {
             toolCalls: [{
               id: tc.id,
               type: tc.type,
-              function: { name: tc.functionName, arguments: tc.functionArguments }
+              function: {
+                name: tc.functionName,
+                arguments: tc.functionArguments
+              }
             }]
           };
           this.messages.push(toolCallEntry);
@@ -307,7 +350,7 @@ struct Index {
 
   scrollToBottom(): void {
     setTimeout(() => {
-      this.listScroller.scrollEdge(ScrollEdge.Bottom);
+      this.listScroller.scrollEdge(Edge.Bottom);
     }, 50);
   }
 
@@ -506,12 +549,12 @@ struct Index {
             .alignItems(HorizontalAlign.Center)
             .padding(24)
           } else {
-            List(this.listScroller) {
+            List({ scroller: this.listScroller }) {
               ForEach(this.messages, (msg: ChatMessage) => {
                 ListItem() {
                   if (msg.role === MessageRole.SYSTEM) {
-                    // Hide system messages in UI
-                    Column() {}
+                    Column() {
+                    }
                   } else if (msg.role === MessageRole.USER) {
                     this.UserMessageItem(msg)
                   } else if (msg.role === MessageRole.TOOL) {
@@ -533,7 +576,7 @@ struct Index {
                 this.inputText = value;
               })
               .layoutWeight(1)
-              .minHeight(40)
+              .constraintSize({ minHeight: 40 })
               .maxHeight(120)
               .backgroundColor('#f5f5f5')
               .borderRadius(20)
@@ -670,7 +713,7 @@ struct Index {
           Row() {
             Text('🔧 ')
               .fontSize(12)
-            Text(`Calling tool: ${tc.function.name}...`)
+            Text('Calling tool: ' + tc.function.name + '...')
               .fontSize(13)
               .fontColor('#8e8e93')
               .fontStyle(FontStyle.Italic)
@@ -705,7 +748,7 @@ struct Index {
       Row() {
         Text('🔧 ')
           .fontSize(12)
-        Text(`Tool result (${msg.toolName || 'tool'}):`)
+        Text('Tool result (' + (msg.toolName || 'tool') + '):')
           .fontSize(12)
           .fontColor('#8e8e93')
 

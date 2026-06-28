@@ -1,4 +1,4 @@
-import { router } from '@kit.AbilityKit';
+import router from '@ohos.router';
 import { STORAGE_KEY_API } from '../common/constants';
 
 @Entry
@@ -34,6 +34,7 @@ struct Settings {
 
         Blank()
 
+        // Spacer for symmetry
         Text('')
           .width(60)
       }

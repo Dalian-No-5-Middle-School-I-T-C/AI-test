@@ -27,13 +27,15 @@ export interface ChatMessage {
   toolCalls?: ToolCall[];
 }
 
+export interface ToolFunctionDef {
+  name: string;
+  description: string;
+  parameters: object;
+}
+
 export interface ToolDefinition {
   type: string;
-  function: {
-    name: string;
-    description: string;
-    parameters: object;
-  };
+  function: ToolFunctionDef;
 }
 
 export interface ChatSession {
@@ -59,4 +61,37 @@ export interface ApiMessage {
   content: string;
   tool_call_id?: string;
   tool_calls?: ToolCall[];
+}
+
+export interface DeltaContent {
+  thinking?: string;
+  content?: string;
+  tool_calls?: ToolCallDeltaItem[];
+}
+
+export interface ToolCallDeltaItem {
+  index?: number;
+  id?: string;
+  type?: string;
+  function?: ToolCallDeltaFunction;
+}
+
+export interface ToolCallDeltaFunction {
+  name?: string;
+  arguments?: string;
+}
+
+export interface SSEChoice {
+  delta?: DeltaContent;
+  finish_reason?: string;
+}
+
+export interface SSEResponse {
+  choices?: SSEChoice[];
+  error?: SSEError;
+}
+
+export interface SSEError {
+  message: string;
+  type?: string;
 }
