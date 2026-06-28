@@ -160,6 +160,8 @@ class ChatManager {
       conv.title = generateTitle(userText);
     }
 
+    await this.persistConversation();
+
     let apiMessages = buildApiMessages(displayToApiMessages(conv.messages));
 
     try {
@@ -185,6 +187,11 @@ class ChatManager {
         streamMsg.content = result.content;
         streamMsg.reasoningContent = result.reasoningContent;
         streamMsg.toolCalls = result.toolCalls.length > 0 ? result.toolCalls : undefined;
+
+        if (!streamMsg.content && !streamMsg.reasoningContent &&
+          (!streamMsg.toolCalls || streamMsg.toolCalls.length === 0)) {
+          streamMsg.content = '未收到模型回复，请检查 API Key、模型名称或网络连接。';
+        }
 
         if (this.abortFlag) {
           conv.messages.pop();
@@ -217,6 +224,8 @@ class ChatManager {
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : '未知错误';
       callbacks.onError(errMsg);
+      await this.persistConversation();
+      callbacks.onConversationUpdated(conv);
     } finally {
       this.isLoading = false;
       callbacks.onLoadingChange(false);

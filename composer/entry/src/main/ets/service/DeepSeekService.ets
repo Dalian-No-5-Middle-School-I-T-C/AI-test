@@ -1,5 +1,6 @@
 import { http } from '@kit.NetworkKit';
 import { BusinessError } from '@kit.BasicServicesKit';
+import { util } from '@kit.ArkTS';
 import {
   ApiChatMessage,
   AppSettings,
@@ -17,12 +18,8 @@ const SYSTEM_PROMPT =
 let activeHttpRequest: http.HttpRequest | null = null;
 
 function arrayBufferToString(buffer: ArrayBuffer): string {
-  const uint8 = new Uint8Array(buffer);
-  let result = '';
-  for (let i = 0; i < uint8.length; i++) {
-    result += String.fromCharCode(uint8[i]);
-  }
-  return result;
+  const decoder = util.TextDecoder.create('utf-8', { ignoreBOM: true });
+  return decoder.decodeToString(new Uint8Array(buffer), { stream: false });
 }
 
 function generateId(): string {
@@ -51,11 +48,34 @@ interface StreamDelta {
 interface StreamChunkChoice {
   index: number;
   delta?: StreamDelta;
+  message?: StreamDelta;
   finish_reason?: string | null;
 }
 
 interface StreamChunk {
+  error?: ApiErrorBody;
   choices?: StreamChunkChoice[];
+}
+
+interface ApiErrorBody {
+  message?: string;
+}
+
+interface ApiErrorResponse {
+  error?: ApiErrorBody;
+}
+
+interface ThinkingConfig {
+  type: string;
+}
+
+interface ChatRequestBody {
+  model: string;
+  messages: ApiChatMessage[];
+  stream: boolean;
+  tools: ToolDefinition[];
+  thinking?: ThinkingConfig;
+  reasoning_effort?: string;
 }
 
 function mergeToolCallDelta(existing: ToolCall[], delta: DeltaToolCall[]): ToolCall[] {
@@ -116,43 +136,79 @@ function processStreamChunk(
   chunk: StreamChunk,
   state: StreamResult,
   callbacks: StreamCallbacks,
-): boolean {
+): void {
+  if (chunk.error?.message) {
+    throw new Error(chunk.error.message);
+  }
   if (!chunk.choices || chunk.choices.length === 0) {
-    return false;
+    return;
   }
   const choice = chunk.choices[0];
-  let isDone = false;
+  const delta = choice.delta ?? choice.message;
 
-  if (choice.delta?.reasoning_content) {
-    state.reasoningContent += choice.delta.reasoning_content;
-    callbacks.onReasoning(choice.delta.reasoning_content);
+  if (delta?.reasoning_content) {
+    state.reasoningContent += delta.reasoning_content;
+    callbacks.onReasoning(delta.reasoning_content);
   }
-  if (choice.delta?.content) {
-    state.content += choice.delta.content;
-    callbacks.onContent(choice.delta.content);
+  if (delta?.content) {
+    state.content += delta.content;
+    callbacks.onContent(delta.content);
   }
-  if (choice.delta?.tool_calls && choice.delta.tool_calls.length > 0) {
-    state.toolCalls = mergeToolCallDelta(state.toolCalls, choice.delta.tool_calls);
+  if (delta?.tool_calls && delta.tool_calls.length > 0) {
+    state.toolCalls = mergeToolCallDelta(state.toolCalls, delta.tool_calls);
     callbacks.onToolCallsUpdate(state.toolCalls);
   }
   if (choice.finish_reason) {
     state.finishReason = choice.finish_reason;
-    isDone = true;
   }
-  return isDone;
 }
 
-interface ThinkingConfig {
-  type: string;
+function processSSEText(
+  text: string,
+  buffer: string,
+  state: StreamResult,
+  callbacks: StreamCallbacks,
+): string {
+  let pending = buffer + text;
+  const lines = pending.split('\n');
+  const remaining = lines.pop() ?? '';
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed === 'data: [DONE]' || trimmed === 'data:[DONE]') {
+      continue;
+    }
+    const chunk = parseSSELine(line);
+    if (chunk) {
+      processStreamChunk(chunk, state, callbacks);
+    }
+  }
+  return remaining;
 }
 
-interface ChatRequestBody {
-  model: string;
-  messages: ApiChatMessage[];
-  stream: boolean;
-  tools: ToolDefinition[];
-  thinking?: ThinkingConfig;
-  reasoning_effort?: string;
+function parseApiErrorBody(body: string): string {
+  try {
+    const parsed = JSON.parse(body) as ApiErrorResponse;
+    if (parsed.error?.message) {
+      return parsed.error.message;
+    }
+  } catch (_e) {
+    // ignore
+  }
+  if (body.length > 200) {
+    return body.substring(0, 200);
+  }
+  return body;
+}
+
+function getResponseBodyString(result: string | Object | ArrayBuffer): string {
+  if (typeof result === 'string') {
+    return result;
+  }
+  if (result instanceof ArrayBuffer) {
+    return arrayBufferToString(result);
+  }
+  return JSON.stringify(result);
 }
 
 function buildRequestBody(
@@ -228,54 +284,60 @@ export function streamChatCompletion(
 
     let isDone = false;
     let receivedStreamData = false;
-    let buffer = '';
+    let lineBuffer = '';
 
     const finish = (): void => {
       if (!isDone) {
         isDone = true;
         callbacks.onDone(state.finishReason);
+        try {
+          httpRequest.destroy();
+        } catch (_e) {
+          // ignore
+        }
         activeHttpRequest = null;
         resolve(state);
       }
     };
 
+    const fail = (message: string): void => {
+      if (!isDone) {
+        isDone = true;
+        callbacks.onError(message);
+        try {
+          httpRequest.destroy();
+        } catch (_e) {
+          // ignore
+        }
+        activeHttpRequest = null;
+        reject(new Error(message));
+      }
+    };
+
     httpRequest.on('dataReceive', (data: ArrayBuffer) => {
       receivedStreamData = true;
-      const text = arrayBufferToString(data);
-      buffer += text;
-
-      const lines = buffer.split('\n');
-      buffer = lines.pop() ?? '';
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (trimmed === 'data: [DONE]' || trimmed === 'data:[DONE]') {
-          finish();
-          continue;
-        }
-        const chunk = parseSSELine(line);
-        if (chunk) {
-          const chunkDone = processStreamChunk(chunk, state, callbacks);
-          if (chunkDone) {
-            finish();
-          }
-        }
+      try {
+        lineBuffer = processSSEText(arrayBufferToString(data), lineBuffer, state, callbacks);
+      } catch (e) {
+        const errMsg = e instanceof Error ? e.message : '流式解析失败';
+        fail(errMsg);
       }
     });
 
     httpRequest.on('dataEnd', () => {
-      if (buffer.length > 0) {
-        const chunk = parseSSELine(buffer);
-        if (chunk) {
-          processStreamChunk(chunk, state, callbacks);
+      if (lineBuffer.length > 0) {
+        try {
+          lineBuffer = processSSEText('\n', lineBuffer, state, callbacks);
+        } catch (e) {
+          const errMsg = e instanceof Error ? e.message : '流式解析失败';
+          fail(errMsg);
         }
       }
-      finish();
     });
 
     const requestBody = buildRequestBody(messages, settings);
 
-    httpRequest.requestInStream(
+    httpRequest.request(
       API_URL,
       {
         method: http.RequestMethod.POST,
@@ -288,21 +350,34 @@ export function streamChatCompletion(
         connectTimeout: 30000,
         readTimeout: 180000,
       },
-      (err: BusinessError, _responseCode: number) => {
-        if (err) {
-          if (!isDone) {
-            isDone = true;
-            const errMsg = `网络请求失败: ${err.message}`;
-            callbacks.onError(errMsg);
-            activeHttpRequest = null;
-            reject(new Error(errMsg));
-          }
+      (err: BusinessError, resp: http.HttpResponse) => {
+        if (isDone) {
           return;
         }
 
-        if (!receivedStreamData && !isDone) {
-          finish();
+        if (err) {
+          fail(`网络请求失败: ${err.message}`);
+          return;
         }
+
+        if (resp.responseCode >= 400) {
+          const body = resp.result !== undefined ? getResponseBodyString(resp.result) : '';
+          fail(`HTTP ${resp.responseCode}: ${parseApiErrorBody(body)}`);
+          return;
+        }
+
+        if (!receivedStreamData && resp.result !== undefined) {
+          try {
+            const body = getResponseBodyString(resp.result);
+            lineBuffer = processSSEText(body, lineBuffer, state, callbacks);
+          } catch (e) {
+            const errMsg = e instanceof Error ? e.message : '响应解析失败';
+            fail(errMsg);
+            return;
+          }
+        }
+
+        finish();
       },
     );
   });

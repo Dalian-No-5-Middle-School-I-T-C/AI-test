@@ -20,9 +20,26 @@ export struct ChatPage {
     this.loadCurrentConversation();
   }
 
+  syncMessagesFromManager(): void {
+    const conv = chatManager.getConversation();
+    if (!conv) {
+      return;
+    }
+    this.messages = conv.messages.map((m: DisplayMessage): DisplayMessage => ({
+      id: m.id,
+      role: m.role,
+      content: m.content,
+      reasoningContent: m.reasoningContent,
+      toolCalls: m.toolCalls,
+      toolCallId: m.toolCallId,
+      toolName: m.toolName,
+      isStreaming: m.isStreaming,
+    }));
+  }
+
   async loadCurrentConversation(): Promise<void> {
     const conv = await chatManager.ensureConversation();
-    this.messages = [...conv.messages];
+    this.syncMessagesFromManager();
     setTimeout(() => {
       this.scroller.scrollEdge(Edge.Bottom);
     }, 100);
@@ -40,6 +57,12 @@ export struct ChatPage {
       return;
     }
 
+    const latestSettings = await storageService.getSettings();
+    this.settings.apiKey = latestSettings.apiKey;
+    this.settings.model = latestSettings.model;
+    this.settings.thinkingEnabled = latestSettings.thinkingEnabled;
+    this.settings.reasoningEffort = latestSettings.reasoningEffort;
+
     if (!this.settings.apiKey || this.settings.apiKey.trim().length === 0) {
       AlertDialog.show({
         title: '缺少 API Key',
@@ -53,15 +76,15 @@ export struct ChatPage {
 
     await chatManager.sendMessage(text, this.settings, {
       onStreamUpdate: (_update: ChatStreamUpdate) => {
-        this.messages = [...(chatManager.getConversation()?.messages ?? [])];
+        this.syncMessagesFromManager();
         this.scrollToBottom();
       },
       onMessageAdded: (_message: DisplayMessage) => {
-        this.messages = [...(chatManager.getConversation()?.messages ?? [])];
+        this.syncMessagesFromManager();
         this.scrollToBottom();
       },
       onConversationUpdated: async (_conv) => {
-        this.messages = [...(chatManager.getConversation()?.messages ?? [])];
+        this.syncMessagesFromManager();
       },
       onError: (message: string) => {
         AlertDialog.show({
