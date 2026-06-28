@@ -257,6 +257,63 @@ export function cancelActiveRequest(): void {
   }
 }
 
+function buildHttpOptions(requestBody: ChatRequestBody, apiKey: string): http.HttpRequestOptions {
+  return {
+    method: http.RequestMethod.POST,
+    header: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+      'Accept': 'text/event-stream',
+    },
+    extraData: JSON.stringify(requestBody),
+    connectTimeout: 30000,
+    readTimeout: 180000,
+  };
+}
+
+function attachStreamListeners(
+  httpRequest: http.HttpRequest,
+  state: StreamResult,
+  callbacks: StreamCallbacks,
+  receivedStreamData: StreamFlag,
+  lineBuffer: StreamBuffer,
+  fail: (message: string) => void,
+): void {
+  httpRequest.on('dataReceive', (data: ArrayBuffer) => {
+    receivedStreamData.value = true;
+    try {
+      lineBuffer.text = processSSEText(
+        arrayBufferToString(data),
+        lineBuffer.text,
+        state,
+        callbacks,
+      );
+    } catch (e) {
+      const errMsg = e instanceof Error ? e.message : '流式解析失败';
+      fail(errMsg);
+    }
+  });
+
+  httpRequest.on('dataEnd', () => {
+    if (lineBuffer.text.length > 0) {
+      try {
+        lineBuffer.text = processSSEText('\n', lineBuffer.text, state, callbacks);
+      } catch (e) {
+        const errMsg = e instanceof Error ? e.message : '流式解析失败';
+        fail(errMsg);
+      }
+    }
+  });
+}
+
+class StreamFlag {
+  value: boolean = false;
+}
+
+class StreamBuffer {
+  text: string = '';
+}
+
 export function streamChatCompletion(
   messages: ApiChatMessage[],
   settings: AppSettings,
@@ -272,9 +329,6 @@ export function streamChatCompletion(
 
     cancelActiveRequest();
 
-    const httpRequest = http.createHttp();
-    activeHttpRequest = httpRequest;
-
     const state: StreamResult = {
       content: '',
       reasoningContent: '',
@@ -283,10 +337,12 @@ export function streamChatCompletion(
     };
 
     let isDone = false;
-    let receivedStreamData = false;
-    let lineBuffer = '';
+    const receivedStreamData = new StreamFlag();
+    const lineBuffer = new StreamBuffer();
+    const requestBody = buildRequestBody(messages, settings);
+    const options = buildHttpOptions(requestBody, settings.apiKey);
 
-    const finish = (): void => {
+    const finish = (httpRequest: http.HttpRequest): void => {
       if (!isDone) {
         isDone = true;
         callbacks.onDone(state.finishReason);
@@ -295,12 +351,14 @@ export function streamChatCompletion(
         } catch (_e) {
           // ignore
         }
-        activeHttpRequest = null;
+        if (activeHttpRequest === httpRequest) {
+          activeHttpRequest = null;
+        }
         resolve(state);
       }
     };
 
-    const fail = (message: string): void => {
+    const fail = (httpRequest: http.HttpRequest, message: string): void => {
       if (!isDone) {
         isDone = true;
         callbacks.onError(message);
@@ -309,75 +367,47 @@ export function streamChatCompletion(
         } catch (_e) {
           // ignore
         }
-        activeHttpRequest = null;
+        if (activeHttpRequest === httpRequest) {
+          activeHttpRequest = null;
+        }
         reject(new Error(message));
       }
     };
 
-    httpRequest.on('dataReceive', (data: ArrayBuffer) => {
-      receivedStreamData = true;
-      try {
-        lineBuffer = processSSEText(arrayBufferToString(data), lineBuffer, state, callbacks);
-      } catch (e) {
-        const errMsg = e instanceof Error ? e.message : '流式解析失败';
-        fail(errMsg);
-      }
-    });
-
-    httpRequest.on('dataEnd', () => {
-      if (lineBuffer.length > 0) {
-        try {
-          lineBuffer = processSSEText('\n', lineBuffer, state, callbacks);
-        } catch (e) {
-          const errMsg = e instanceof Error ? e.message : '流式解析失败';
-          fail(errMsg);
-        }
-      }
-    });
-
-    const requestBody = buildRequestBody(messages, settings);
+    const httpRequest = http.createHttp();
+    activeHttpRequest = httpRequest;
+    attachStreamListeners(httpRequest, state, callbacks, receivedStreamData, lineBuffer,
+      (message: string) => {
+        fail(httpRequest, message);
+      });
 
     httpRequest.request(
       API_URL,
-      {
-        method: http.RequestMethod.POST,
-        header: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${settings.apiKey}`,
-          'Accept': 'text/event-stream',
-        },
-        extraData: JSON.stringify(requestBody),
-        connectTimeout: 30000,
-        readTimeout: 180000,
-      },
+      options,
       (err: BusinessError, resp: http.HttpResponse) => {
         if (isDone) {
           return;
         }
-
         if (err) {
-          fail(`网络请求失败: ${err.message}`);
+          fail(httpRequest, `网络请求失败: ${err.message}`);
           return;
         }
-
         if (resp.responseCode >= 400) {
           const body = resp.result !== undefined ? getResponseBodyString(resp.result) : '';
-          fail(`HTTP ${resp.responseCode}: ${parseApiErrorBody(body)}`);
+          fail(httpRequest, `HTTP ${resp.responseCode}: ${parseApiErrorBody(body)}`);
           return;
         }
-
-        if (!receivedStreamData && resp.result !== undefined) {
+        if (!receivedStreamData.value && resp.result !== undefined) {
           try {
             const body = getResponseBodyString(resp.result);
-            lineBuffer = processSSEText(body, lineBuffer, state, callbacks);
+            lineBuffer.text = processSSEText(body, lineBuffer.text, state, callbacks);
           } catch (e) {
             const errMsg = e instanceof Error ? e.message : '响应解析失败';
-            fail(errMsg);
+            fail(httpRequest, errMsg);
             return;
           }
         }
-
-        finish();
+        finish(httpRequest);
       },
     );
   });

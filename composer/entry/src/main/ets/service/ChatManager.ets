@@ -13,6 +13,8 @@ import { storageService } from './StorageService';
 export interface ChatStreamUpdate {
   reasoningContent: string;
   content: string;
+  reasoningDelta: string;
+  contentDelta: string;
   toolCalls: ToolCall[];
   isStreaming: boolean;
 }
@@ -244,6 +246,8 @@ class ChatManager {
         callbacks.onStreamUpdate({
           reasoningContent: streamMsg.reasoningContent,
           content: streamMsg.content,
+          reasoningDelta: text,
+          contentDelta: '',
           toolCalls: streamMsg.toolCalls ?? [],
           isStreaming: true,
         });
@@ -253,6 +257,8 @@ class ChatManager {
         callbacks.onStreamUpdate({
           reasoningContent: streamMsg.reasoningContent,
           content: streamMsg.content,
+          reasoningDelta: '',
+          contentDelta: text,
           toolCalls: streamMsg.toolCalls ?? [],
           isStreaming: true,
         });
@@ -262,6 +268,8 @@ class ChatManager {
         callbacks.onStreamUpdate({
           reasoningContent: streamMsg.reasoningContent,
           content: streamMsg.content,
+          reasoningDelta: '',
+          contentDelta: '',
           toolCalls: toolCalls,
           isStreaming: true,
         });
@@ -270,6 +278,8 @@ class ChatManager {
         callbacks.onStreamUpdate({
           reasoningContent: streamMsg.reasoningContent,
           content: streamMsg.content,
+          reasoningDelta: '',
+          contentDelta: '',
           toolCalls: streamMsg.toolCalls ?? [],
           isStreaming: false,
         });

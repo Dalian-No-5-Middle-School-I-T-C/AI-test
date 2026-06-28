@@ -2,6 +2,7 @@ import { AppSettings, DisplayMessage } from '../model/ChatModels';
 import { MessageBubble } from '../components/MessageBubble';
 import { chatManager, ChatStreamUpdate } from '../service/ChatManager';
 import { storageService } from '../service/StorageService';
+import { StreamDisplayQueue } from '../service/StreamDisplayQueue';
 import { UIContext } from '@kit.ArkUI';
 
 const STREAM_PLACEHOLDER: DisplayMessage = {
@@ -24,9 +25,18 @@ export struct ChatPage {
   @State streamReasoning: string = '';
   private scroller: Scroller = new Scroller();
   private uiContext: UIContext | null = null;
+  private displayQueue: StreamDisplayQueue = new StreamDisplayQueue();
 
   aboutToAppear(): void {
     this.uiContext = this.getUIContext();
+    this.displayQueue.setListener((content: string, reasoning: string) => {
+      this.runOnUi(() => {
+        this.streamVisible = true;
+        this.streamContent = content;
+        this.streamReasoning = reasoning;
+        this.scrollToBottom();
+      });
+    });
     this.loadCurrentConversation();
   }
 
@@ -43,6 +53,7 @@ export struct ChatPage {
   }
 
   clearStreamState(): void {
+    this.displayQueue.reset();
     this.streamVisible = false;
     this.streamContent = '';
     this.streamReasoning = '';
@@ -84,6 +95,14 @@ export struct ChatPage {
     }, 50);
   }
 
+  handleStreamUpdate(update: ChatStreamUpdate): void {
+    if (update.reasoningDelta.length > 0 || update.contentDelta.length > 0) {
+      this.displayQueue.pushDelta(update.contentDelta, update.reasoningDelta);
+      return;
+    }
+    this.displayQueue.syncTargets(update.content, update.reasoningContent);
+  }
+
   async sendMessage(): Promise<void> {
     const text = this.inputText.trim();
     if (!text || this.isLoading) {
@@ -109,12 +128,10 @@ export struct ChatPage {
 
     await chatManager.sendMessage(text, this.settings, {
       onStreamUpdate: (update: ChatStreamUpdate) => {
-        this.runOnUi(() => {
-          this.streamVisible = true;
-          this.streamContent = update.content;
-          this.streamReasoning = update.reasoningContent;
-          this.scrollToBottom();
-        });
+        this.handleStreamUpdate(update);
+        if (!update.isStreaming) {
+          this.displayQueue.flush();
+        }
       },
       onMessageAdded: (message: DisplayMessage) => {
         this.runOnUi(() => {
@@ -122,6 +139,7 @@ export struct ChatPage {
             this.syncMessagesFromManager();
           }
           if (message.role === 'assistant' && message.isStreaming) {
+            this.displayQueue.reset();
             this.streamVisible = true;
             this.streamContent = '';
             this.streamReasoning = '';
@@ -131,6 +149,7 @@ export struct ChatPage {
       },
       onConversationUpdated: (_conv) => {
         this.runOnUi(() => {
+          this.displayQueue.flush();
           this.clearStreamState();
           this.syncMessagesFromManager();
           this.scrollToBottom();
@@ -138,6 +157,7 @@ export struct ChatPage {
       },
       onError: (message: string) => {
         this.runOnUi(() => {
+          this.displayQueue.flush();
           this.clearStreamState();
           this.syncMessagesFromManager();
           AlertDialog.show({
@@ -288,6 +308,7 @@ export struct ChatPage {
         .onClick(() => {
           if (this.isLoading) {
             chatManager.cancelRequest();
+            this.displayQueue.reset();
             this.isLoading = false;
             this.clearStreamState();
             this.syncMessagesFromManager();
