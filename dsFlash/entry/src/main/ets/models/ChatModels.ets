@@ -75,8 +75,8 @@ export interface ApiMessage {
 }
 
 export interface DeltaContent {
-  thinking?: string;
-  content?: string;
+  thinking?: string | null;
+  content?: string | null;
   tool_calls?: ToolCallDeltaItem[];
 }
 

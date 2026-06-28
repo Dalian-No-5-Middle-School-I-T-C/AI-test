@@ -314,22 +314,6 @@ struct Index {
         for (const tc of toolCallResults) {
           const result: string = ToolService.executeTool(tc.functionName, tc.functionArguments);
 
-          const toolCallEntry: ChatMessage = {
-            id: generateId(),
-            role: MessageRole.ASSISTANT,
-            content: '',
-            timestamp: Date.now(),
-            toolCalls: [{
-              id: tc.id,
-              type: tc.type,
-              function: {
-                name: tc.functionName,
-                arguments: tc.functionArguments
-              }
-            }]
-          };
-          this.messages.push(toolCallEntry);
-
           const toolResultEntry: ChatMessage = {
             id: generateId(),
             role: MessageRole.TOOL,

@@ -144,13 +144,13 @@ export class DeepSeekService {
           const delta: DeltaContent | undefined = choice.delta;
 
           if (delta) {
-            const thinkingVal: string | undefined = delta.thinking;
-            if (thinkingVal !== undefined) {
+            const thinkingVal: string | null | undefined = delta.thinking;
+            if (thinkingVal !== undefined && thinkingVal !== null) {
               onThinking(thinkingVal);
             }
 
-            const contentVal: string | undefined = delta.content;
-            if (contentVal !== undefined) {
+            const contentVal: string | null | undefined = delta.content;
+            if (contentVal !== undefined && contentVal !== null) {
               onContent(contentVal);
             }
 
