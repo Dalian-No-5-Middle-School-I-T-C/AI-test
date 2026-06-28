@@ -1,7 +1,16 @@
-import { AppSettings, DisplayMessage, MODEL_OPTIONS, REASONING_EFFORT_OPTIONS } from '../model/ChatModels';
+import { AppSettings, DisplayMessage } from '../model/ChatModels';
 import { MessageBubble } from '../components/MessageBubble';
 import { chatManager, ChatStreamUpdate } from '../service/ChatManager';
 import { storageService } from '../service/StorageService';
+import { UIContext } from '@kit.ArkUI';
+
+const STREAM_PLACEHOLDER: DisplayMessage = {
+  id: '__streaming__',
+  role: 'assistant',
+  content: '',
+  reasoningContent: '',
+  isStreaming: true,
+};
 
 @Component
 export struct ChatPage {
@@ -10,9 +19,14 @@ export struct ChatPage {
   @State messages: DisplayMessage[] = [];
   @State inputText: string = '';
   @State isLoading: boolean = false;
+  @State streamVisible: boolean = false;
+  @State streamContent: string = '';
+  @State streamReasoning: string = '';
   private scroller: Scroller = new Scroller();
+  private uiContext: UIContext | null = null;
 
   aboutToAppear(): void {
+    this.uiContext = this.getUIContext();
     this.loadCurrentConversation();
   }
 
@@ -20,29 +34,48 @@ export struct ChatPage {
     this.loadCurrentConversation();
   }
 
+  runOnUi(task: () => void): void {
+    if (this.uiContext !== null) {
+      this.uiContext.runScopedTask(task);
+      return;
+    }
+    setTimeout(task, 0);
+  }
+
+  clearStreamState(): void {
+    this.streamVisible = false;
+    this.streamContent = '';
+    this.streamReasoning = '';
+  }
+
   syncMessagesFromManager(): void {
     const conv = chatManager.getConversation();
     if (!conv) {
       return;
     }
-    this.messages = conv.messages.map((m: DisplayMessage): DisplayMessage => ({
-      id: m.id,
-      role: m.role,
-      content: m.content,
-      reasoningContent: m.reasoningContent,
-      toolCalls: m.toolCalls,
-      toolCallId: m.toolCallId,
-      toolName: m.toolName,
-      isStreaming: m.isStreaming,
-    }));
+    this.messages = conv.messages
+      .filter((m: DisplayMessage) => !m.isStreaming)
+      .map((m: DisplayMessage): DisplayMessage => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        reasoningContent: m.reasoningContent,
+        toolCalls: m.toolCalls,
+        toolCallId: m.toolCallId,
+        toolName: m.toolName,
+        isStreaming: false,
+      }));
   }
 
   async loadCurrentConversation(): Promise<void> {
-    const conv = await chatManager.ensureConversation();
-    this.syncMessagesFromManager();
-    setTimeout(() => {
-      this.scroller.scrollEdge(Edge.Bottom);
-    }, 100);
+    await chatManager.ensureConversation();
+    this.runOnUi(() => {
+      this.clearStreamState();
+      this.syncMessagesFromManager();
+      setTimeout(() => {
+        this.scroller.scrollEdge(Edge.Bottom);
+      }, 100);
+    });
   }
 
   scrollToBottom(): void {
@@ -75,26 +108,49 @@ export struct ChatPage {
     this.inputText = '';
 
     await chatManager.sendMessage(text, this.settings, {
-      onStreamUpdate: (_update: ChatStreamUpdate) => {
-        this.syncMessagesFromManager();
-        this.scrollToBottom();
+      onStreamUpdate: (update: ChatStreamUpdate) => {
+        this.runOnUi(() => {
+          this.streamVisible = true;
+          this.streamContent = update.content;
+          this.streamReasoning = update.reasoningContent;
+          this.scrollToBottom();
+        });
       },
-      onMessageAdded: (_message: DisplayMessage) => {
-        this.syncMessagesFromManager();
-        this.scrollToBottom();
+      onMessageAdded: (message: DisplayMessage) => {
+        this.runOnUi(() => {
+          if (message.role === 'user') {
+            this.syncMessagesFromManager();
+          }
+          if (message.role === 'assistant' && message.isStreaming) {
+            this.streamVisible = true;
+            this.streamContent = '';
+            this.streamReasoning = '';
+          }
+          this.scrollToBottom();
+        });
       },
-      onConversationUpdated: async (_conv) => {
-        this.syncMessagesFromManager();
+      onConversationUpdated: (_conv) => {
+        this.runOnUi(() => {
+          this.clearStreamState();
+          this.syncMessagesFromManager();
+          this.scrollToBottom();
+        });
       },
       onError: (message: string) => {
-        AlertDialog.show({
-          title: '请求失败',
-          message: message,
-          confirm: { value: '确定', action: () => {} },
+        this.runOnUi(() => {
+          this.clearStreamState();
+          this.syncMessagesFromManager();
+          AlertDialog.show({
+            title: '请求失败',
+            message: message,
+            confirm: { value: '确定', action: () => {} },
+          });
         });
       },
       onLoadingChange: (loading: boolean) => {
-        this.isLoading = loading;
+        this.runOnUi(() => {
+          this.isLoading = loading;
+        });
       },
     });
   }
@@ -104,7 +160,11 @@ export struct ChatPage {
       chatManager.cancelRequest();
     }
     await chatManager.createNewConversation();
-    this.messages = [];
+    this.runOnUi(() => {
+      this.clearStreamState();
+      this.messages = [];
+      this.isLoading = false;
+    });
   }
 
   getDisplayMessages(): DisplayMessage[] {
@@ -148,7 +208,7 @@ export struct ChatPage {
       .width('100%')
       .padding({ left: 16, right: 16, bottom: 8 })
 
-      if (this.messages.length === 0) {
+      if (this.messages.length === 0 && !this.streamVisible) {
         Column() {
           Text('👋')
             .fontSize(48)
@@ -175,6 +235,15 @@ export struct ChatPage {
             ForEach(this.getDisplayMessages(), (msg: DisplayMessage) => {
               MessageBubble({ message: msg })
             }, (msg: DisplayMessage) => msg.id)
+
+            if (this.streamVisible) {
+              MessageBubble({
+                message: STREAM_PLACEHOLDER,
+                liveContent: this.streamContent,
+                liveReasoning: this.streamReasoning,
+                useLiveText: true,
+              })
+            }
           }
           .width('100%')
           .padding({ left: 16, right: 16, top: 8, bottom: 8 })
@@ -220,6 +289,8 @@ export struct ChatPage {
           if (this.isLoading) {
             chatManager.cancelRequest();
             this.isLoading = false;
+            this.clearStreamState();
+            this.syncMessagesFromManager();
           } else {
             this.sendMessage();
           }

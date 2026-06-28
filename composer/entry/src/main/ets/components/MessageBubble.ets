@@ -3,7 +3,22 @@ import { DisplayMessage, ToolCall } from '../model/ChatModels';
 @Component
 export struct MessageBubble {
   @Prop message: DisplayMessage;
+  @Prop liveContent: string = '';
+  @Prop liveReasoning: string = '';
+  @Prop useLiveText: boolean = false;
   @State thinkingExpanded: boolean = false;
+
+  getDisplayContent(): string {
+    return this.useLiveText ? this.liveContent : this.message.content;
+  }
+
+  getDisplayReasoning(): string {
+    return this.useLiveText ? this.liveReasoning : this.message.reasoningContent;
+  }
+
+  isStreamingNow(): boolean {
+    return this.useLiveText || (this.message.isStreaming ?? false);
+  }
 
   build() {
     if (this.message.role === 'user') {
@@ -50,7 +65,7 @@ export struct MessageBubble {
             .fontSize(12)
             .fontColor('#888888')
             .margin({ left: 4 })
-          if (this.message.isStreaming) {
+          if (this.isStreamingNow()) {
             LoadingProgress()
               .width(16)
               .height(16)
@@ -60,7 +75,7 @@ export struct MessageBubble {
         }
         .margin({ bottom: 6 })
 
-        if (this.message.reasoningContent.length > 0) {
+        if (this.getDisplayReasoning().length > 0) {
           Column() {
             Row() {
               Text('💭 思考过程')
@@ -78,15 +93,15 @@ export struct MessageBubble {
             .width('100%')
             .margin({ bottom: 4 })
 
-            if (this.thinkingExpanded || this.message.isStreaming) {
-              Text(this.message.reasoningContent)
+            if (this.thinkingExpanded || this.isStreamingNow()) {
+              Text(this.getDisplayReasoning())
                 .fontSize(13)
                 .fontColor('#666666')
                 .lineHeight(20)
                 .fontStyle(FontStyle.Italic)
             } else {
-              Text(this.message.reasoningContent.substring(0, 80) +
-                (this.message.reasoningContent.length > 80 ? '...' : ''))
+              Text(this.getDisplayReasoning().substring(0, 80) +
+                (this.getDisplayReasoning().length > 80 ? '...' : ''))
                 .fontSize(13)
                 .fontColor('#999999')
                 .lineHeight(20)
@@ -104,13 +119,18 @@ export struct MessageBubble {
           this.ToolCallBadge(this.message.toolCalls)
         }
 
-        if (this.message.content.length > 0) {
-          Text(this.message.content)
+        if (this.getDisplayContent().length > 0) {
+          Text(this.getDisplayContent())
             .fontSize(15)
             .fontColor('#333333')
             .lineHeight(22)
-        } else if (this.message.isStreaming && this.message.reasoningContent.length > 0) {
+        } else if (this.isStreamingNow() && this.getDisplayReasoning().length > 0) {
           Text('正在生成回答...')
+            .fontSize(13)
+            .fontColor('#AAAAAA')
+            .fontStyle(FontStyle.Italic)
+        } else if (this.isStreamingNow()) {
+          Text('正在思考...')
             .fontSize(13)
             .fontColor('#AAAAAA')
             .fontStyle(FontStyle.Italic)
