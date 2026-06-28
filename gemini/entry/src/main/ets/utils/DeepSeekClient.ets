@@ -8,6 +8,7 @@ export interface StreamCallbacks {
   onReasoningDelta: (delta: string) => void;
   onContentDelta: (delta: string) => void;
   onToolCallDetected?: (toolName: string) => void;
+  onToolMessage?: (assistantMsg: ChatMessage, toolMsg: ChatMessage) => void;
   onComplete: (fullMessage: ChatMessage) => void;
   onError: (errorMsg: string) => void;
 }
@@ -204,6 +205,10 @@ export class DeepSeekClient {
 
           // Append assistant message and tool response message to history
           const updatedHistory = [...historyMessages, assistantMessage, toolMessage];
+
+          if (callbacks.onToolMessage) {
+            callbacks.onToolMessage(assistantMessage, toolMessage);
+          }
 
           // Re-trigger sendChatStream for the final response
           await this.sendChatStream(updatedHistory, callbacks);

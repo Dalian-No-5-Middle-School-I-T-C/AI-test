@@ -141,9 +141,13 @@ struct Index {
       return;
     }
 
-    // Append user message
-    this.sessions[sessionIdx].messages.push(userMessage);
+    // Append user message using array spread to force UI reactivity
+    const newMessagesForUser = [...this.sessions[sessionIdx].messages, userMessage];
+    this.sessions[sessionIdx].messages = newMessagesForUser;
     
+    // Force a root array reactivity update for sidebar layout
+    this.sessions = [...this.sessions];
+
     // Automatically update session title on first message
     if (this.sessions[sessionIdx].messages.filter(m => m.role === 'user').length === 1) {
       const shortTitle = textToSend.length > 15 ? `${textToSend.substring(0, 15)}...` : textToSend;
@@ -171,8 +175,21 @@ struct Index {
             this.streamingContent += delta;
             this.scrollToBottom();
           },
+          onToolMessage: (assistantMsg: ChatMessage, toolMsg: ChatMessage) => {
+            // Append intermediate messages (Tool Call + Tool Result)
+            const updatedMessages = [...this.sessions[sessionIdx].messages, assistantMsg, toolMsg];
+            this.sessions[sessionIdx].messages = updatedMessages;
+            this.sessions = [...this.sessions]; // Force root update
+            this.streamingReasoning = '';
+            this.streamingContent = '';
+            this.saveSessionsState();
+            this.scrollToBottom();
+          },
           onComplete: (fullMessage: ChatMessage) => {
-            this.sessions[sessionIdx].messages.push(fullMessage);
+            const finalMessages = [...this.sessions[sessionIdx].messages, fullMessage];
+            this.sessions[sessionIdx].messages = finalMessages;
+            this.sessions = [...this.sessions]; // Force root update
+            
             this.streamingReasoning = '';
             this.streamingContent = '';
             this.isGenerating = false;
@@ -186,7 +203,10 @@ struct Index {
               content: `Error: ${errorMsg}`,
               timestamp: Date.now()
             };
-            this.sessions[sessionIdx].messages.push(systemErrorMessage);
+            const errorMessages = [...this.sessions[sessionIdx].messages, systemErrorMessage];
+            this.sessions[sessionIdx].messages = errorMessages;
+            this.sessions = [...this.sessions]; // Force root update
+            
             this.streamingReasoning = '';
             this.streamingContent = '';
             this.isGenerating = false;
