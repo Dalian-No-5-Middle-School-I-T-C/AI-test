@@ -1,6 +1,5 @@
 import { preferences } from '@kit.ArkData';
 import { fileIo } from '@kit.CoreFileKit';
-import { util } from '@kit.ArkTS';
 import { ChatMessage, Conversation, ConversationSummary } from '../models/ChatModels';
 
 const PREF_NAME = 'composer_chat_prefs';
@@ -45,13 +44,7 @@ export class StorageService {
       if (!fileIo.accessSync(filePath)) {
         return '';
       }
-      let file = fileIo.openSync(filePath, 0o0);
-      let buf = new ArrayBuffer(65536);
-      let len = fileIo.readSync(file.fd, buf);
-      fileIo.closeSync(file.fd);
-      let data = new Uint8Array(buf, 0, len);
-      let decoder = util.TextDecoder.create('utf-8');
-      return decoder.decodeWithStream(data);
+      return fileIo.readTextSync(filePath);
     } catch (e) {
       return '';
     }
