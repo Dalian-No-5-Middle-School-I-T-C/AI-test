@@ -1,9 +1,9 @@
 // StorageService.ets - 本地存储服务（ArkTS 严格模式最终版）
-// 说明：preferences.getPreferences 需要 Context 类型，
-// 从 @ohos.arkui 导入 Context（HarmonyOS NEXT API 12+）
 import preferences from '@ohos.data.preferences';
-import { Context } from '@ohos.arkui';
+import common from '@ohos.app.ability.common';
 import { AppSettings, Conversation } from '../model/ChatModels';
+
+type Context = common.Context;
 
 const SETTINGS_KEY: string = 'app_settings';
 const CONVERSATIONS_KEY: string = 'conversations';

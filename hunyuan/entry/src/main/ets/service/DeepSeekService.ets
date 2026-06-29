@@ -29,13 +29,24 @@ export interface ApiMessage {
 }
 
 /**
+ * thinking 配置（对应 DeepSeek thinking 参数）
+ */
+export class ThinkingConfig {
+  type: string = 'enabled';
+
+  constructor(type: string) {
+    this.type = type;
+  }
+}
+
+/**
  * API 请求体格式
  */
 export interface ApiRequestBody {
   model: string;
   messages: ApiMessage[];
   stream: boolean;
-  thinking?: { type: string };
+  thinking?: ThinkingConfig;
   reasoning_effort?: string;
   tools?: ToolDefinition[];
   tool_choice?: string;
@@ -288,10 +299,10 @@ export class DeepSeekService {
     };
 
     if (thinkingEnabled) {
-      body.thinking = { type: 'enabled' };
+      body.thinking = new ThinkingConfig('enabled');
       body.reasoning_effort = reasoningEffort;
     } else {
-      body.thinking = { type: 'disabled' };
+      body.thinking = new ThinkingConfig('disabled');
     }
 
     if (tools && tools.length > 0) {
