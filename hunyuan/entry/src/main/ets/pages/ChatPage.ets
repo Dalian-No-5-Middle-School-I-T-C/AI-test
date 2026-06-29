@@ -170,8 +170,9 @@ export struct ChatPage {
       onReasoning: (text: string): void => {
         this.statusText = '思考中...';
         if (assistantIdx >= 0 && assistantIdx < this.messages.length) {
-          const old: ChatMessage = this.messages[assistantIdx];
-          this.messages[assistantIdx] = {
+          const updated: ChatMessage[] = [...this.messages];
+          const old: ChatMessage = updated[assistantIdx];
+          updated[assistantIdx] = {
             id: old.id,
             role: old.role,
             content: old.content,
@@ -179,13 +180,15 @@ export struct ChatPage {
             tool_calls: old.tool_calls,
             timestamp: old.timestamp,
           };
+          this.messages = updated;
         }
       },
       onContent: (text: string): void => {
         this.statusText = '';
         if (assistantIdx >= 0 && assistantIdx < this.messages.length) {
-          const old: ChatMessage = this.messages[assistantIdx];
-          this.messages[assistantIdx] = {
+          const updated: ChatMessage[] = [...this.messages];
+          const old: ChatMessage = updated[assistantIdx];
+          updated[assistantIdx] = {
             id: old.id,
             role: old.role,
             content: text,
@@ -193,6 +196,7 @@ export struct ChatPage {
             tool_calls: old.tool_calls,
             timestamp: old.timestamp,
           };
+          this.messages = updated;
         }
         this.scrollToBottom();
       },
@@ -213,11 +217,13 @@ export struct ChatPage {
       onError: (err: string): void => {
         this.isLoading = false;
         this.statusText = `错误: ${err}`;
-        // 移除空的 assistant 占位消息
+        // 移除空的 assistant 占位消息（用整体替换触发 UI 更新）
         if (assistantIdx >= 0 && assistantIdx < this.messages.length) {
           const last: ChatMessage = this.messages[assistantIdx];
           if (last && last.content === '' && !last.reasoning_content) {
-            this.messages.splice(assistantIdx, 1);
+            const updated: ChatMessage[] = [...this.messages];
+            updated.splice(assistantIdx, 1);
+            this.messages = updated;
           }
         }
       },
@@ -235,7 +241,9 @@ export struct ChatPage {
       if (assistantIdx >= 0 && assistantIdx < this.messages.length) {
         const last: ChatMessage = this.messages[assistantIdx];
         if (last && last.content === '' && !last.reasoning_content) {
-          this.messages.splice(assistantIdx, 1);
+          const updated: ChatMessage[] = [...this.messages];
+          updated.splice(assistantIdx, 1);
+          this.messages = updated;
         }
       }
     }
@@ -260,12 +268,13 @@ export struct ChatPage {
 
     const results: ToolCallResult[] = ToolExecutor.executeToolCalls(toolCalls);
 
-    // 把工具结果作为 Tool 消息加入
+    // 把工具结果作为 Tool 消息加入（必须带 tool_call_id）
     for (const res of results) {
       const toolMsg: ChatMessage = {
         id: generateId(),
         role: MessageRole.Tool,
         content: res.content,
+        tool_call_id: res.tool_call_id,
         timestamp: Date.now(),
       };
       this.messages.push(toolMsg);
@@ -299,8 +308,9 @@ export struct ChatPage {
       onReasoning: (text: string): void => {
         this.statusText = '思考中...';
         if (finalIdx >= 0 && finalIdx < this.messages.length) {
-          const old: ChatMessage = this.messages[finalIdx];
-          this.messages[finalIdx] = {
+          const updated: ChatMessage[] = [...this.messages];
+          const old: ChatMessage = updated[finalIdx];
+          updated[finalIdx] = {
             id: old.id,
             role: old.role,
             content: old.content,
@@ -308,13 +318,15 @@ export struct ChatPage {
             tool_calls: old.tool_calls,
             timestamp: old.timestamp,
           };
+          this.messages = updated;
         }
       },
       onContent: (text: string): void => {
         this.statusText = '';
         if (finalIdx >= 0 && finalIdx < this.messages.length) {
-          const old: ChatMessage = this.messages[finalIdx];
-          this.messages[finalIdx] = {
+          const updated: ChatMessage[] = [...this.messages];
+          const old: ChatMessage = updated[finalIdx];
+          updated[finalIdx] = {
             id: old.id,
             role: old.role,
             content: text,
@@ -322,6 +334,7 @@ export struct ChatPage {
             tool_calls: old.tool_calls,
             timestamp: old.timestamp,
           };
+          this.messages = updated;
         }
         this.scrollToBottom();
       },

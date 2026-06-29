@@ -35,6 +35,7 @@ export interface ChatMessage {
   content: string;
   reasoning_content?: string;
   tool_calls?: ToolCallItem[];
+  tool_call_id?: string;
   timestamp: number;
 }
 

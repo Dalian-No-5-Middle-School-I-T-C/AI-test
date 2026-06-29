@@ -27,6 +27,7 @@ export interface ApiMessage {
   role: string;
   content: string;
   tool_calls?: ToolCallItem[];
+  tool_call_id?: string;
 }
 
 /**
@@ -203,6 +204,9 @@ export class DeepSeekService {
       };
       if (m.tool_calls && m.tool_calls.length > 0) {
         msg.tool_calls = m.tool_calls;
+      }
+      if (m.tool_call_id && m.tool_call_id.length > 0) {
+        msg.tool_call_id = m.tool_call_id;
       }
       apiMessages.push(msg);
     }
