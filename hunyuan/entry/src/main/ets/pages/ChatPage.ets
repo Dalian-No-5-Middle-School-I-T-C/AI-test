@@ -315,7 +315,7 @@ struct ChatPage {
 
   @Builder
   buildMessageList() {
-    List() {
+    List({ scroller: this.scroller }) {
       ForEach(this.messages, (msg: ChatMessage) => {
         ListItem() {
           MessageBubble({ message: msg, showThinking: this.showThinking })
@@ -325,7 +325,6 @@ struct ChatPage {
     }
     .width('100%')
     .layoutWeight(1)
-    .scroller(this.scroller)
   }
 
   @Builder
@@ -458,18 +457,16 @@ struct ChatPage {
                   Text(`${new Date(conv.updatedAt).toLocaleString()} · ${conv.model}`)
                     .fontSize(12).fontColor('#999')
                 }
-                .layoutWeight(1).alignItems(HorizontalAlign.Start)
+                .layoutWeight(1)
+                .alignItems(HorizontalAlign.Start)
+                .onClick(() => { this.loadConversation(conv); })
 
                 Text('🗑️')
                   .fontSize(18).padding(8)
-                  .onClick((event: ClickEvent) => {
-                    event.stopPropagation();
-                    this.deleteConversation(conv.id);
-                  })
+                  .onClick(() => { this.deleteConversation(conv.id); })
               }
               .width('100%').padding(16)
             }
-            .onClick(() => { this.loadConversation(conv); })
           }, (conv: Conversation) => conv.id)
         }
         .width('100%').layoutWeight(1)

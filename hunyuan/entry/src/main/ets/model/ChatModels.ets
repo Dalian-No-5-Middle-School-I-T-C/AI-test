@@ -1,6 +1,4 @@
-// ChatModels.ets - 数据模型定义（ArkTS 兼容版）
-import { ESObject } from '@ohos.arkts.lang';
-
+// ChatModels.ets - 数据模型定义（ArkTS 严格模式兼容）
 /**
  * 聊天消息角色
  */
@@ -12,13 +10,25 @@ export enum MessageRole {
 }
 
 /**
+ * 工具调用项（API 返回）
+ */
+export interface ToolCallItem {
+  id: string;
+  type: string;
+  function: {
+    name: string;
+    arguments: string;
+  };
+}
+
+/**
  * 单条聊天消息
  */
 export interface ChatMessage {
   role: MessageRole;
   content: string;
   reasoning_content?: string;
-  tool_calls?: ESObject[];
+  tool_calls?: ToolCallItem[];
   id: string;
   timestamp: number;
 }
@@ -38,15 +48,20 @@ export interface Conversation {
 }
 
 /**
+ * 工具定义中的 function 字段
+ */
+export interface ToolFunctionDef {
+  name: string;
+  description: string;
+  parameters: Record<string, Object>;
+}
+
+/**
  * 工具定义（传给 API）
  */
 export interface ToolDefinition {
   type: string;
-  function: {
-    name: string;
-    description: string;
-    parameters: Object;
-  };
+  function: ToolFunctionDef;
 }
 
 /**

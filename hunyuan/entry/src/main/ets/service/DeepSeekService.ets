@@ -1,9 +1,9 @@
-// DeepSeekService.ets - DeepSeek API 服务层（ArkTS 兼容版）
+// DeepSeekService.ets - DeepSeek API 服务层（ArkTS 严格模式兼容版）
 import http from '@ohos.net.http';
 import { BusinessError } from '@kit.BasicServicesKit';
-import { ChatMessage, MessageRole, ToolDefinition, ToolCallResult } from '../model/ChatModels';
+import { ChatMessage, MessageRole, ToolCallItem, ToolDefinition, ToolCallResult } from '../model/ChatModels';
 
-const BASE_URL = 'https://api.deepseek.com/chat/completions';
+const BASE_URL: string = 'https://api.deepseek.com/chat/completions';
 
 /**
  * 流式输出回调接口
@@ -11,9 +11,27 @@ const BASE_URL = 'https://api.deepseek.com/chat/completions';
 export interface StreamCallbacks {
   onReasoning?: (text: string) => void;
   onContent?: (text: string) => void;
-  onToolCall?: (toolCalls: ESObject) => void;
+  onToolCall?: (toolCalls: Object) => void;
   onDone?: () => void;
   onError?: (err: string) => void;
+}
+
+/**
+ * SSE 解析辅助：从 JSON.parse 结果中按 key 取字符串
+ */
+function getStr(obj: Object, key: string): string {
+  const val: Object = (obj as Record<string, Object>)[key];
+  if (val === undefined || val === null) return '';
+  return String(val);
+}
+
+/**
+ * SSE 解析辅助：从 JSON.parse 结果中按 key 取对象数组
+ */
+function getArr(obj: Object, key: string): Object[] {
+  const val: Object = (obj as Record<string, Object>)[key];
+  if (val instanceof Array) return val as Object[];
+  return [];
 }
 
 /**
@@ -32,7 +50,6 @@ export class DeepSeekService {
 
   /**
    * 流式聊天请求（SSE）
-   * 使用 requestInStream 实现真正的流式输出
    */
   async chatStream(
     messages: ChatMessage[],
@@ -42,16 +59,16 @@ export class DeepSeekService {
     callbacks: StreamCallbacks,
     tools?: ToolDefinition[]
   ): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const httpRequest = http.createHttp();
-      const body = this.buildRequestBody(messages, model, thinkingEnabled, reasoningEffort, tools, true);
+    return new Promise<void>((resolve: (value: void | PromiseLike<void>) => void, reject: (reason?: Object) => void) => {
+      const httpRequest: http.HttpRequest = http.createHttp();
+      const body: string = this.buildRequestBody(messages, model, thinkingEnabled, reasoningEffort, tools, true);
 
-      let buffer = '';
+      let buffer: string = '';
 
       httpRequest.on('dataReceive', (data: ArrayBuffer) => {
-        const chunk = this.arrayBufferToString(data);
-        buffer += chunk;
-        const lines = buffer.split('\n');
+        const chunk: string = this.arrayBufferToString(data);
+        buffer = buffer + chunk;
+        const lines: string[] = buffer.split('\n');
         buffer = lines.pop() || '';
         for (const line of lines) {
           this.handleSSELine(line, callbacks);
@@ -63,16 +80,12 @@ export class DeepSeekService {
           this.handleSSELine(buffer, callbacks);
         }
         httpRequest.destroy();
-        callbacks.onDone?.();
+        if (callbacks.onDone) callbacks.onDone();
         resolve();
       });
 
-      httpRequest.on('error', (err: BusinessError) => {
-        httpRequest.destroy();
-        const msg = `网络错误: ${err.code} ${err.message}`;
-        callbacks.onError?.(msg);
-        reject(new Error(msg));
-      });
+      // 注意：ArkTS 的 HttpRequest 不支持 'error' 事件
+      // 错误处理通过 requestInStream 的回调进行
 
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
@@ -80,16 +93,29 @@ export class DeepSeekService {
         'Accept': 'text/event-stream',
       };
 
-      // requestInStream 正确签名：requestInStream(url: string, options: HttpRequestOptions): void
       try {
         httpRequest.requestInStream(BASE_URL, {
           method: http.RequestMethod.POST,
           header: headers,
           extraData: body,
           expectDataType: http.HttpDataType.STRING,
+        }, (err: BusinessError, data: http.HttpResponse) => {
+          if (err) {
+            httpRequest.destroy();
+            const msg: string = `请求失败: ${err.code} ${err.message}`;
+            if (callbacks.onError) callbacks.onError(msg);
+            reject(new Error(msg));
+          }
+          // 检查 HTTP 状态码
+          if (data.responseCode !== 200) {
+            httpRequest.destroy();
+            const errMsg: string = `API 错误 ${data.responseCode}: ${data.result}`;
+            if (callbacks.onError) callbacks.onError(errMsg);
+            reject(new Error(errMsg));
+          }
         });
       } catch (e) {
-        callbacks.onError?.(`请求异常: ${(e as Error).message}`);
+        if (callbacks.onError) callbacks.onError(`请求异常: ${(e as Error).message}`);
         reject(e as Error);
       }
     });
@@ -105,9 +131,9 @@ export class DeepSeekService {
     reasoningEffort: string,
     tools?: ToolDefinition[]
   ): Promise<ChatMessage> {
-    return new Promise((resolve, reject) => {
-      const httpRequest = http.createHttp();
-      const body = this.buildRequestBody(messages, model, thinkingEnabled, reasoningEffort, tools, false);
+    return new Promise<ChatMessage>((resolve: (value: ChatMessage | PromiseLike<ChatMessage>) => void, reject: (reason?: Object) => void) => {
+      const httpRequest: http.HttpRequest = http.createHttp();
+      const body: string = this.buildRequestBody(messages, model, thinkingEnabled, reasoningEffort, tools, false);
 
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
@@ -130,8 +156,8 @@ export class DeepSeekService {
           return;
         }
         try {
-          const result = JSON.parse(data.result as string);
-          const assistantMsg = this.parseNonStreamResponse(result);
+          const result: Object = JSON.parse(data.result as string);
+          const assistantMsg: ChatMessage = this.parseNonStreamResponse(result);
           resolve(assistantMsg);
         } catch (e) {
           reject(new Error(`解析响应失败: ${(e as Error).message}`));
@@ -144,34 +170,39 @@ export class DeepSeekService {
    * 处理单条 SSE 行
    */
   private handleSSELine(line: string, callbacks: StreamCallbacks): void {
-    const trimmed = line.trim();
+    const trimmed: string = line.trim();
     if (!trimmed.startsWith('data:')) {
       return;
     }
 
-    const dataStr = trimmed.substring(5).trim();
+    const dataStr: string = trimmed.substring(5).trim();
     if (dataStr === '[DONE]') {
       return;
     }
 
     try {
-      const chunk: ESObject = JSON.parse(dataStr);
-      const choices = chunk['choices'];
+      const chunk: Object = JSON.parse(dataStr);
+      const choices: Object[] = getArr(chunk, 'choices');
       if (!choices || choices.length === 0) return;
 
-      const choice = choices[0];
-      const delta = choice['delta'];
+      const choice: Object = choices[0];
+      const delta: Object = (choice as Record<string, Object>)['delta'];
 
-      if (delta && delta['reasoning_content'] && callbacks.onReasoning) {
-        callbacks.onReasoning(delta['reasoning_content']);
-      }
+      if (delta) {
+        const reasoningText: string = getStr(delta, 'reasoning_content');
+        if (reasoningText && callbacks.onReasoning) {
+          callbacks.onReasoning(reasoningText);
+        }
 
-      if (delta && delta['content'] && callbacks.onContent) {
-        callbacks.onContent(delta['content']);
-      }
+        const contentText: string = getStr(delta, 'content');
+        if (contentText && callbacks.onContent) {
+          callbacks.onContent(contentText);
+        }
 
-      if (delta && delta['tool_calls'] && callbacks.onToolCall) {
-        callbacks.onToolCall(delta['tool_calls']);
+        const toolCalls: Object = (delta as Record<string, Object>)['tool_calls'];
+        if (toolCalls && callbacks.onToolCall) {
+          callbacks.onToolCall(toolCalls);
+        }
       }
     } catch {
       // 忽略无法解析的行
@@ -189,8 +220,8 @@ export class DeepSeekService {
     tools?: ToolDefinition[],
     stream: boolean = false
   ): string {
-    const apiMessages: ESObject[] = messages.map(m => {
-      const msg: ESObject = {
+    const apiMessages: Record<string, Object>[] = messages.map((m: ChatMessage): Record<string, Object> => {
+      const msg: Record<string, Object> = {
         role: m.role.toString(),
         content: m.content,
       };
@@ -200,7 +231,7 @@ export class DeepSeekService {
       return msg;
     });
 
-    const body: ESObject = {
+    const body: Record<string, Object> = {
       model: model,
       messages: apiMessages,
       stream: stream,
@@ -224,32 +255,33 @@ export class DeepSeekService {
   /**
    * 解析非流式响应
    */
-  private parseNonStreamResponse(response: ESObject): ChatMessage {
-    const choices = response['choices'];
+  private parseNonStreamResponse(response: Object): ChatMessage {
+    const choices: Object[] = getArr(response, 'choices');
     if (!choices || choices.length === 0) {
       throw new Error('无效的 API 响应：无 choices');
     }
 
-    const choice = choices[0];
-    const msg = choice['message'];
+    const choice: Object = choices[0];
+    const msg: Object = (choice as Record<string, Object>)['message'];
+
     return {
       id: this.generateId(),
       role: MessageRole.Assistant,
-      content: msg ? (msg['content'] || '') : '',
-      reasoning_content: msg ? (msg['reasoning_content'] || '') : '',
-      tool_calls: msg ? (msg['tool_calls'] || undefined) : undefined,
+      content: msg ? getStr(msg, 'content') : '',
+      reasoning_content: msg ? getStr(msg, 'reasoning_content') : '',
+      tool_calls: msg ? (msg as Record<string, Object>)['tool_calls'] as ToolCallItem[] | undefined : undefined,
       timestamp: Date.now(),
     };
   }
 
   /**
-   * ArrayBuffer 转 string（兼容 ArkTS）
+   * ArrayBuffer 转 string（手动循环，ArkTS 兼容）
    */
   private arrayBufferToString(buffer: ArrayBuffer): string {
-    const uint8 = new Uint8Array(buffer);
-    let result = '';
-    for (let i = 0; i < uint8.length; i++) {
-      result += String.fromCharCode(uint8[i]);
+    const uint8: Uint8Array = new Uint8Array(buffer);
+    let result: string = '';
+    for (let i: number = 0; i < uint8.length; i++) {
+      result = result + String.fromCharCode(uint8[i]);
     }
     return result;
   }
@@ -264,52 +296,67 @@ export class DeepSeekService {
 
 /**
  * 工具调用处理器 - 执行本地工具
+ * 使用命名空间模式避免 this 问题
  */
-export class ToolExecutor {
-  static getSystemTime(): string {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    const hours = String(now.getHours()).padStart(2, '0');
-    const minutes = String(now.getMinutes()).padStart(2, '0');
-    const seconds = String(now.getSeconds()).padStart(2, '0');
+export namespace ToolExecutor {
+  /**
+   * 获取当前手机系统时间工具
+   */
+  export function getSystemTime(): string {
+    const now: Date = new Date();
+    const year: number = now.getFullYear();
+    const month: string = String(now.getMonth() + 1).padStart(2, '0');
+    const day: string = String(now.getDate()).padStart(2, '0');
+    const hours: string = String(now.getHours()).padStart(2, '0');
+    const minutes: string = String(now.getMinutes()).padStart(2, '0');
+    const seconds: string = String(now.getSeconds()).padStart(2, '0');
     return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
   }
 
-  static executeToolCalls(toolCalls: ESObject[]): ToolCallResult[] {
+  /**
+   * 执行工具调用，返回结果消息列表
+   */
+  export function executeToolCalls(toolCalls: Object[]): ToolCallResult[] {
     const results: ToolCallResult[] = [];
     for (const tc of toolCalls) {
-      const funcName = tc['function'] ? (tc['function']['name'] || '') : '';
-      let resultContent = '';
+      const funcObj: Object = (tc as Record<string, Object>)['function'];
+      const funcName: string = funcObj ? getStr(funcObj, 'name') : '';
+      let resultContent: string = '';
       if (funcName === 'get_system_time') {
-        resultContent = this.getSystemTime();
+        resultContent = ToolExecutor.getSystemTime();
       } else {
         resultContent = `未知工具: ${funcName}`;
       }
       results.push({
         role: 'tool',
         content: resultContent,
-        tool_call_id: tc['id'],
-      } as ESObject as ToolCallResult);
+        tool_call_id: (tc as Record<string, Object>)['id'] as string,
+      } as ToolCallResult);
     }
     return results;
   }
 
-  static getToolDefinitions(): ToolDefinition[] {
-    return [
-      {
-        type: 'function',
-        function: {
-          name: 'get_system_time',
-          description: '获取当前手机系统的日期和时间',
-          parameters: {
-            type: 'object',
-            properties: {},
-            required: [],
-          },
-        },
-      },
-    ];
+  /**
+   * 获取工具定义列表（传给 API）
+   */
+  export function getToolDefinitions(): ToolDefinition[] {
+    const params: Record<string, Object> = {
+      type: 'object',
+      properties: {} as Record<string, Object>,
+      required: [] as string[],
+    };
+
+    const funcDef: ToolFunctionDef = {
+      name: 'get_system_time',
+      description: '获取当前手机系统的日期和时间',
+      parameters: params,
+    };
+
+    const toolDef: ToolDefinition = {
+      type: 'function',
+      function: funcDef,
+    };
+
+    return [toolDef];
   }
 }
