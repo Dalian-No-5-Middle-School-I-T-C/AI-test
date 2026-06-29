@@ -1,7 +1,6 @@
-import { Column, Row, Text, TextInput, Button, List, Blank, Divider, ScrollController, TextArea, Select, FlexAlign, Alignment, FontWeight } from '@kit.ArkUI'
-import { AbilityKit } from '@kit.AbilityKit'
+import { Column, Row, Text, TextInput, Button, List, Blank, Divider, ScrollController, TextArea, Select, FlexAlign, Alignment, FontWeight, BarState, TextController, ScrollState } from '@kit.ArkUI'
 import { DeepSeekApi } from '../service/DeepSeekApi'
-import { StorageUtil } from '../utils/StorageUtil'
+import { StorageUtil, ConvItem, MsgItem } from '../utils/StorageUtil'
 import { UserRole, ThinkDepth } from '../model/ChatModel'
 
 class ChatMsg {
@@ -22,16 +21,10 @@ class ChatMsg {
   }
 }
 
-class ChatConfig {
+class ChatConf {
   model: string
   thinkDepth: ThinkDepth
   apiKey: string
-
-  constructor(model: string, thinkDepth: ThinkDepth, apiKey: string) {
-    this.model = model
-    this.thinkDepth = thinkDepth
-    this.apiKey = apiKey
-  }
 }
 
 @Entry
@@ -39,296 +32,370 @@ class ChatConfig {
 struct ChatPage {
   @State messages: ChatMsg[] = []
   @State inputText: string = ''
-  @State isStreaming: boolean = false
-  @State showSettings: boolean = false
-  @State config: ChatConfig = new ChatConfig('deepseek-v4-flash', ThinkDepth.OFF, '')
-  @State convTitle: string = ''
+  @State streaming: boolean = false
+  @State conf: ChatConf
+  @State title: string = ''
   @State convId: string = ''
+  @State settingsOpen: boolean = false
 
-  listScroller: ScrollController = new ScrollController()
-  rowScroller: ScrollController = new ScrollController()
-  textCtrl: TextController = new TextController()
-  scrollTimer: number = 0
+  scroller: ScrollController = new ScrollController()
+  rowScroll: ScrollController = new ScrollController()
+  ctrl: TextController = new TextController()
+  timer: number = 0
 
   aboutToAppear(): void {
-    this.loadConfig()
-    this.loadConversationMap()
-  }
-
-  loadConfig(): void {
-    this.config = new ChatConfig(
-      StorageUtil.getModel(),
-      StorageUtil.getThink() === 'high' ? ThinkDepth.HIGH : StorageUtil.getThink() === 'max' ? ThinkDepth.MAX : ThinkDepth.OFF,
-      StorageUtil.getApiKey(),
-    )
-  }
-
-  loadConversationMap(): void {
-    const rawMap = StorageUtil.getConvMap()
-    const keys: string[] = Object.keys(rawMap)
-    if (keys.length === 0) {
-      this.createNewConversation()
-      return
+    this.conf = new ChatConf()
+    this.conf.model = StorageUtil.getModel()
+    this.conf.thinkDepth = StorageUtil.getThink() === 'high' ? ThinkDepth.HIGH : StorageUtil.getThink() === 'max' ? ThinkDepth.MAX : ThinkDepth.OFF
+    this.conf.apiKey = StorageUtil.getApiKey()
+    const convs = StorageUtil.getConvMap()
+    if (convs.length === 0) {
+      this.newConversation()
+    } else {
+      this.convId = convs[0].id
+      this.title = convs[0].title
+      this.loadMessages(this.convId)
     }
-    this.convId = keys[0]
-    this.convTitle = rawMap[this.convId]
-    this.loadMessages(this.convId)
   }
 
-  createNewConversation(): void {
+  newConversation(): void {
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7)
     this.convId = id
-    this.convTitle = '新对话'
+    this.title = '新对话'
     this.messages = []
-    const map: Record<string, string> = StorageUtil.getConvMap()
-    map[id] = this.convTitle
-    StorageUtil.saveConvMap(map)
+    const c0 = new ConvItem(id, this.title)
+    const arr: ConvItem[] = []
+    arr.push(c0)
+    StorageUtil.saveConvMap(arr)
     StorageUtil.saveMessages(id, [])
   }
 
   loadMessages(id: string): void {
-    const arr = StorageUtil.getMessages(id)
+    const list = StorageUtil.getMessages(id)
     const out: ChatMsg[] = []
-    for (let i = 0; i < arr.length; i++) {
-      const m = arr[i]
-      const msg = new ChatMsg(
-        m['id'] || (Date.now().toString(36) + Math.random().toString(36).slice(2, 6)),
-        m['role'] || UserRole.USER,
-        m['content'] || '',
-        m['reasoning'] || '',
-        false,
-        m['timestamp'] || 0,
-      )
-      out.push(msg)
+    for (let i = 0; i < list.length; i++) {
+      const it = list[i]
+      out.push(new ChatMsg(it.id, it.role, it.content, it.reasoning, false, it.timestamp))
     }
     this.messages = out
   }
 
-  persistMessages(): void {
-    const msgArr: Object[] = []
+  persist(): void {
+    const arr: MsgItem[] = []
     for (let i = 0; i < this.messages.length; i++) {
       const m = this.messages[i]
-      msgArr.push({
-        id: m.id,
-        role: m.role,
-        content: m.content,
-        reasoning: m.reasoningContent,
-        timestamp: m.timestamp,
-      })
+      arr.push(new MsgItem(m.id, m.role, m.content, m.reasoningContent, m.timestamp))
     }
-    StorageUtil.saveMessages(this.convId, msgArr)
-    const map: Record<string, string> = StorageUtil.getConvMap()
-    map[this.convId] = this.convTitle
-    StorageUtil.saveConvMap(map)
+    StorageUtil.saveMessages(this.convId, arr)
+    const convs: ConvItem[] = []
+    convs.push(new ConvItem(this.convId, this.title))
+    StorageUtil.saveConvMap(convs)
   }
 
-  switchConversation(id: string): void {
-    if (this.isStreaming) {
+  switchConv(id: string): void {
+    if (this.streaming) {
       return
     }
-    this.persistMessages()
+    this.persist()
     this.convId = id
-    const map: Record<string, string> = StorageUtil.getConvMap()
-    this.convTitle = map[id]
+    const convs = StorageUtil.getConvMap()
+    for (let i = 0; i < convs.length; i++) {
+      if (convs[i].id === id) {
+        this.title = convs[i].title
+        break
+      }
+    }
     this.loadMessages(id)
-    this.showSettings = false
+    this.settingsOpen = false
   }
 
-  async sendMessage(): Promise<void> {
+  sendMessage(): void {
     const text = this.inputText.trim()
-    if (!text || this.isStreaming) {
+    if (text.length === 0 || this.streaming) {
       return
     }
     this.inputText = ''
-    this.textCtrl.deselectText()
-
-    if (this.config.apiKey.length === 0) {
+    if (this.conf.apiKey.length === 0) {
       return
     }
-
     const uid = Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
     const userMsg = new ChatMsg(uid, UserRole.USER, text, '', false, Date.now())
-    this.messages = this.messages.concat([userMsg])
+    this.messages = this.appendMsg(userMsg)
 
-    if (this.messages.filter(m => m.role === UserRole.USER).length === 1) {
-      this.convTitle = text.slice(0, 20)
+    if (this.countUser() === 1) {
+      this.title = text.slice(0, 20)
     }
-    this.persistMessages()
+    this.persist()
 
     const aid = Date.now().toString(36)
-    const assistantMsg = new ChatMsg(aid, UserRole.ASSISTANT, '', '', false, Date.now())
-    this.messages = this.messages.concat([assistantMsg])
-    this.isStreaming = true
+    const bot = new ChatMsg(aid, UserRole.ASSISTANT, '', '', false, Date.now())
+    const idx = this.messages.length
+    this.messages = this.appendMsg(bot)
+    this.streaming = true
 
-    const apiMessages = this.buildApiMessages()
-    const lastIdx = this.messages.length - 1
-    let assistantBuffer = ''
+    const apiMsgs = this.buildApiMsgs()
+    let buf = ''
 
     await DeepSeekApi.chatStream(
-      this.config.model,
-      apiMessages,
-      this.config.thinkDepth,
+      this.conf.model,
+      apiMsgs,
+      this.conf.thinkDepth,
       (content: string, reasoning: string) => {
-        if (reasoning && reasoning.length > 0) {
-          const cur = this.messages[lastIdx]
-          const updated = new ChatMsg(cur.id, cur.role, cur.content, cur.reasoningContent + reasoning, cur.reasoningVisible, cur.timestamp)
-          this.messages = this.messages.slice(0, lastIdx).concat([updated])
+        if (reasoning.length > 0) {
+          const cur = this.getMessage(idx)
+          const upd = new ChatMsg(cur.id, cur.role, cur.content, cur.reasoningContent + reasoning, cur.reasoningVisible, cur.timestamp)
+          this.setMessage(idx, upd)
         }
-        if (content && content.length > 0) {
-          assistantBuffer += content
-          const cur = this.messages[lastIdx]
-          const updated = new ChatMsg(cur.id, cur.role, cur.content + content, cur.reasoningContent, cur.reasoningVisible, cur.timestamp)
-          this.messages = this.messages.slice(0, lastIdx).concat([updated])
-          this.scheduleScroll()
+        if (content.length > 0) {
+          buf += content
+          const cur = this.getMessage(idx)
+          const upd = new ChatMsg(cur.id, cur.role, cur.content + content, cur.reasoningContent, cur.reasoningVisible, cur.timestamp)
+          this.setMessage(idx, upd)
+          this.scroll()
         }
       },
     )
 
-    this.isStreaming = false
-    this.persistMessages()
+    this.streaming = false
+    this.persist()
   }
 
-  buildApiMessages(): Object[] {
-    const result: Object[] = []
+  buildApiMsgs(): any[] {
+    const out: any[] = []
     for (let i = 0; i < this.messages.length; i++) {
       const m = this.messages[i]
-      const item: Record<string, Object> = { role: m.role, content: m.content }
-      if (m.reasoningContent && m.reasoningContent.length > 0) {
-        item['reasoning_content'] = m.reasoningContent
+      const o: any = {}
+      o.role = m.role
+      o.content = m.content
+      if (m.reasoningContent.length > 0) {
+        o.reasoning_content = m.reasoningContent
       }
-      result.push(item)
+      out.push(o)
     }
-    const sys: Record<string, Object> = { role: 'system', content: 'You are a helpful assistant. 需要当前时间时调用 get_current_system_time。' }
-    result.unshift(sys)
-    return result
+    const sys: any = {}
+    sys.role = 'system'
+    sys.content = 'You are a helpful assistant. 需要当前时间时调用 get_current_system_time。'
+    out.unshift(sys)
+    return out
   }
 
-  scheduleScroll(): void {
-    this.scrollTimer = setTimeout(() => {
-      if (this.messages.length > 0) {
-        this.listScroller.scrollToIndex(this.messages.length - 1)
+  getMessage(i: number): ChatMsg {
+    return this.messages[i]
+  }
+
+  setMessage(i: number, m: ChatMsg): void {
+    const arr = this.messages.slice(0)
+    arr[i] = m
+    this.messages = arr
+  }
+
+  appendMsg(m: ChatMsg): ChatMsg[] {
+    const arr = this.messages.slice(0)
+    arr.push(m)
+    return arr
+  }
+
+  countUser(): number {
+    let n = 0
+    for (let i = 0; i < this.messages.length; i++) {
+      if (this.messages[i].role === UserRole.USER) {
+        n++
       }
-    }, 30)
+    }
+    return n
   }
 
-  saveSettings(): void {
-    StorageUtil.saveApiKey(this.config.apiKey)
-    StorageUtil.saveModel(this.config.model)
-    const thinkStr = this.config.thinkDepth === ThinkDepth.HIGH ? 'high' : this.config.thinkDepth === ThinkDepth.MAX ? 'max' : 'off'
-    StorageUtil.saveThink(thinkStr)
-    this.showSettings = false
+  scroll(): void {
+    clearTimeout(this.timer)
+    this.timer = setTimeout(() => {
+      this.scroller.scrollToIndex(this.messages.length - 1)
+    }, 30) as unknown as number
+  }
+
+  save(): void {
+    StorageUtil.saveApiKey(this.conf.apiKey)
+    StorageUtil.saveModel(this.conf.model)
+    const d = this.conf.thinkDepth
+    StorageUtil.saveThink(d === ThinkDepth.HIGH ? 'high' : d === ThinkDepth.MAX ? 'max' : 'off')
+    this.settingsOpen = false
   }
 
   newChat(): void {
-    if (this.isStreaming) {
+    if (this.streaming) {
       return
     }
-    this.persistMessages()
-    this.createNewConversation()
+    this.persist()
+    this.newConversation()
   }
 
   clearChat(): void {
-    if (this.isStreaming) {
+    if (this.streaming) {
       return
     }
     this.messages = []
-    this.persistMessages()
-  }
-
-  toggleSettings(): void {
-    this.showSettings = !this.showSettings
+    this.persist()
   }
 
   toggleReasoning(id: string): void {
-    const out: ChatMsg[] = []
-    for (let i = 0; i < this.messages.length; i++) {
-      const m = this.messages[i]
-      if (m.id === id) {
-        out.push(new ChatMsg(m.id, m.role, m.content, m.reasoningContent, !m.reasoningVisible, m.timestamp))
-      } else {
-        out.push(m)
+    const arr = this.messages.slice(0)
+    for (let i = 0; i < arr.length; i++) {
+      if (arr[i].id === id) {
+        const m = arr[i]
+        const upd = new ChatMsg(m.id, m.role, m.content, m.reasoningContent, !m.reasoningVisible, m.timestamp)
+        arr[i] = upd
+        break
       }
     }
-    this.messages = out
+    this.messages = arr
   }
 
   build() {
     Stack({ alignContent: Alignment.Bottom }) {
       Column() {
         Row() {
-          Text(this.convTitle)
+          Text(this.title)
             .fontSize(17)
             .fontWeight(FontWeight.Bold)
             .layoutWeight(1)
-            .maxLines(1)
-            .onClick(() => {})
-          Blank()
-          Button('新建')
-            .fontSize(13)
-            .onClick(() => this.newChat())
-          Button('清除')
-            .fontSize(13)
-            .onClick(() => this.clearChat())
-          Button(this.showSettings ? '关闭' : '设置')
-            .fontSize(13)
-            .onClick(() => this.toggleSettings())
+          Button('新建').fontSize(13).onClick(() => this.newChat())
+          Button('清除').fontSize(13).onClick(() => this.clearChat())
+          Button(this.settingsOpen ? '关闭' : '设置').fontSize(13).onClick(() => {
+            this.settingsOpen = !this.settingsOpen
+          })
         }
         .width('100%')
         .padding({ left: 12, right: 12, top: 10, bottom: 6 })
         .backgroundColor('#f5f5f5')
 
-        if (this.showSettings) {
+        if (this.settingsOpen) {
           Divider()
-          this.buildSettings()
+          Column() {
+            Text('会话历史').fontSize(15).fontWeight(FontWeight.Bold).width('100%').margin({ bottom: 6 })
+            Scroll(this.rowScroll) {
+              Row() {
+                ForEach(StorageUtil.getConvMap(), (c: ConvItem) => {
+                  Row() {
+                    Text(c.title).fontSize(13).maxLines(1).padding({ left: 12, right: 12, top: 6, bottom: 6 })
+                  }
+                  .backgroundColor(c.id === this.convId ? '#bbdefb' : '#eeeeee')
+                  .borderRadius(16)
+                  .margin({ left: 4, right: 4 })
+                  .onClick(() => {
+                    if (c.id !== this.convId) {
+                      this.switchConv(c.id)
+                    }
+                  })
+                })
+              }
+              .width('100%')
+              .space(6)
+            }
+            .width('100%')
+            .height(52)
+
+            Text('API Key').margin({ top: 10, bottom: 4 }).fontSize(14)
+            TextInput({ placeholder: 'sk-...', text: this.conf.apiKey })
+              .height(40).width('100%').backgroundColor('#f5f5f5').margin({ bottom: 8 })
+              .onChange((v: string) => {
+                const c = this.conf
+                this.conf = new ChatConf()
+                this.conf.model = c.model
+                this.conf.thinkDepth = c.thinkDepth
+                this.conf.apiKey = v
+              })
+
+            Text('模型').margin({ bottom: 4 }).fontSize(14)
+            Select([
+              { value: 'deepseek-v4-flash', label: 'deepseek-v4-flash' },
+              { value: 'deepseek-v4-pro', label: 'deepseek-v4-pro' },
+            ])
+              .value(this.conf.model).width('100%').margin({ bottom: 10 })
+              .onSelect((idx: number) => {
+                const c = this.conf
+                this.conf = new ChatConf()
+                this.conf.model = idx === 0 ? 'deepseek-v4-flash' : 'deepseek-v4-pro'
+                this.conf.thinkDepth = c.thinkDepth
+                this.conf.apiKey = c.apiKey
+              })
+
+            Text('思考模式').margin({ bottom: 4 }).fontSize(14)
+            Select([
+              { value: ThinkDepth.OFF, label: '关闭' },
+              { value: ThinkDepth.HIGH, label: 'high' },
+              { value: ThinkDepth.MAX, label: 'max' },
+            ])
+              .value(this.conf.thinkDepth).width('100%').margin({ bottom: 10 })
+              .onSelect((idx: number) => {
+                const depths: ThinkDepth[] = [ThinkDepth.OFF, ThinkDepth.HIGH, ThinkDepth.MAX]
+                const c = this.conf
+                this.conf = new ChatConf()
+                this.conf.model = c.model
+                this.conf.thinkDepth = depths[idx]
+                this.conf.apiKey = c.apiKey
+              })
+
+            Button('保存').fontSize(14).onClick(() => this.save())
+          }
+          .width('100%').padding(16).backgroundColor('#fafafa')
         }
 
         Divider()
 
-        List({ scroller: this.listScroller }) {
+        List({ scroller: this.scroller }) {
           ForEach(this.messages, (msg: ChatMsg, index: number) => {
             ListItem() {
-              Row() {
-                if (msg.role === UserRole.USER) {
-                  this.buildUserBubble(msg)
-                } else {
-                  if (msg.role === UserRole.SYSTEM) {
-                    this.buildSystemBubble(msg)
-                  } else {
-                    this.buildAssistantBubble(msg, index)
+              if (msg.role === UserRole.USER) {
+                Row() {
+                  Text(msg.content).fontSize(15).maxLines(500).width('100%')
+                }
+                .width('78%')
+                .backgroundColor('#95ec69')
+                .borderRadius(16)
+                .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+              } else if (msg.role === UserRole.SYSTEM) {
+                Row() {
+                  Text(msg.content).fontSize(12).fontColor('#888').maxLines(200).width('94%')
+                }
+                .width('94%')
+              } else {
+                Column() {
+                  if (msg.reasoningContent.length > 0) {
+                    Text(msg.reasoningVisible ? '收起思维' : '展开思维')
+                      .fontSize(12).fontColor('#1565c0')
+                      .onClick(() => this.toggleReasoning(msg.id))
+                    if (msg.reasoningVisible) {
+                      Text(msg.reasoningContent).fontSize(13).fontColor('#555').maxLines(500)
+                        .padding(6).backgroundColor('#f9f9f9').borderRadius(6).width('100%')
+                    }
+                  }
+                  if (msg.content.length > 0) {
+                    Text(msg.content).fontSize(15).maxLines(1000).width('100%')
                   }
                 }
+                .width('78%')
+                .borderRadius(16)
+                .padding({ left: 12, right: 12, top: 8, bottom: 8 })
               }
-              .width('100%')
             }
           })
         }
         .scrollBar(BarState.Auto)
-        .edgeEffect(ScrollEdgeEffect.None)
         .layoutWeight(1)
         .width('100%')
 
         Row() {
-          TextArea({
-            placeholder: '输入消息...',
-            controller: this.textCtrl,
-          })
-            .placeholderColor('#aaaaaa')
-            .height(56)
-            .layoutWeight(1)
-            .maxLines(5)
-            .autoKeyboard(true)
+          TextArea({ placeholder: '输入消息...', controller: this.ctrl })
+            .placeholderColor('#aaaaaa').height(56).layoutWeight(1).maxLines(5).autoKeyboard(true)
             .margin({ right: 8 })
-            .onChange((val: string) => {
-              this.inputText = val
+            .onChange((v: string) => {
+              this.inputText = v
             })
 
-          Button(this.isStreaming ? '停止' : '发送')
-            .width(80)
-            .height(44)
-            .fontSize(14)
+          Button(this.streaming ? '停止' : '发送')
+            .width(80).height(44).fontSize(14)
             .onClick(() => {
-              if (this.isStreaming) {
-                this.isStreaming = false
+              if (this.streaming) {
+                this.streaming = false
               } else {
                 this.sendMessage()
               }
@@ -345,182 +412,5 @@ struct ChatPage {
     .width('100%')
     .height('100%')
     .backgroundColor('#ffffff')
-  }
-
-  @Builder buildUserBubble(msg: ChatMsg) {
-    Row() {
-      Text(msg.content)
-        .fontSize(15)
-        .maxLines(500)
-        .width('100%')
-    }
-    .backgroundColor('#95ec69')
-    .borderRadius(16)
-    .padding({ left: 12, right: 12, top: 8, bottom: 8 })
-  }
-
-  @Builder buildSystemBubble(msg: ChatMsg) {
-    Row() {
-      Text(msg.content)
-        .fontSize(12)
-        .fontColor('#888')
-        .maxLines(200)
-    }
-    .backgroundColor('#f0f0f0')
-    .borderRadius(8)
-    .padding(8)
-    .width('94%')
-  }
-
-  @Builder buildAssistantBubble(msg: ChatMsg, index: number) {
-    Column() {
-      if (msg.reasoningContent && msg.reasoningContent.length > 0) {
-        Row() {
-          Text(msg.reasoningVisible ? '收起思维' : '展开思维')
-            .fontSize(12)
-            .fontColor('#1565c0')
-            .onClick(() => {
-              this.toggleReasoning(msg.id)
-            })
-        }
-        .padding({ bottom: 4 })
-        if (msg.reasoningVisible) {
-          Text(msg.reasoningContent)
-            .fontSize(13)
-            .fontColor('#555')
-            .maxLines(500)
-            .padding({ left: 6, right: 6, top: 4, bottom: 4 })
-            .backgroundColor('#f9f9f9')
-            .borderRadius(6)
-            .width('100%')
-        }
-      }
-      if (msg.content && msg.content.length > 0) {
-        Text(msg.content)
-          .fontSize(15)
-          .maxLines(1000)
-          .width('100%')
-      }
-    }
-    .width('78%')
-    .borderRadius(16)
-    .padding({ left: 12, right: 12, top: 8, bottom: 8 })
-  }
-
-  @Builder buildSettings() {
-    Column() {
-      Text('设置')
-        .fontSize(18)
-        .fontWeight(FontWeight.Bold)
-        .width('100%')
-        .margin({ bottom: 12 })
-
-      Text('API Key (必填)')
-        .fontSize(14)
-        .margin({ top: 10, bottom: 4 })
-      TextInput({ placeholder: 'sk-xxxxxxxxxxxxxxxx', text: this.config.apiKey })
-        .height(40)
-        .width('100%')
-        .backgroundColor('#f5f5f5')
-        .margin({ bottom: 8 })
-        .onChange((val: string) => {
-          const newCfg = new ChatConfig(this.config.model, this.config.thinkDepth, val)
-          this.config = newCfg
-        })
-
-      Text('模型')
-        .fontSize(14)
-        .margin({ bottom: 4 })
-      Select([
-        { value: 'deepseek-v4-flash', label: 'deepseek-v4-flash (推荐)' },
-        { value: 'deepseek-v4-pro', label: 'deepseek-v4-pro' },
-      ])
-        .value(this.config.model)
-        .width('100%')
-        .margin({ bottom: 10 })
-        .onSelect((index: number) => {
-          const newCfg = new ChatConfig(index === 0 ? 'deepseek-v4-flash' : 'deepseek-v4-pro', this.config.thinkDepth, this.config.apiKey)
-          this.config = newCfg
-        })
-
-      Text('思考模式')
-        .fontSize(14)
-        .margin({ bottom: 4 })
-      Select([
-        { value: 'off', label: '关闭' },
-        { value: 'high', label: 'high' },
-        { value: 'max', label: 'max (最深)' },
-      ])
-        .value(this.config.thinkDepth)
-        .width('100%')
-        .margin({ bottom: 10 })
-        .onSelect((index: number) => {
-          const depths: ThinkDepth[] = [ThinkDepth.OFF, ThinkDepth.HIGH, ThinkDepth.MAX]
-          const newCfg = new ChatConfig(this.config.model, depths[index], this.config.apiKey)
-          this.config = newCfg
-        })
-
-      Text('历史会话')
-        .fontSize(15)
-        .fontWeight(FontWeight.Bold)
-        .width('100%')
-        .margin({ bottom: 6 })
-
-      this.buildConvHistory()
-
-      Row() {
-        Blank()
-        Button('保存')
-          .fontSize(14)
-          .onClick(() => this.saveSettings())
-      }
-      .width('100%')
-      .justifyContent(FlexAlign.End)
-      .margin({ top: 8 })
-    }
-    .width('100%')
-    .padding(16)
-    .border({ width: { top: 0.5 } })
-    .backgroundColor('#fafafa')
-  }
-
-  buildConvHistory() {
-    const map: Record<string, string> = StorageUtil.getConvMap()
-    const keys: string[] = Object.keys(map)
-    if (keys.length === 0) {
-      Text('暂无历史会话')
-        .fontSize(13)
-        .fontColor('#888')
-        .width('100%')
-        .textAlign(TextAlign.Center)
-        .margin({ bottom: 10 })
-    } else {
-      Scroll({ scroller: this.rowScroller }) {
-        Row() {
-          ForEach(keys, (key: string) => {
-            Row() {
-              Text(map[key])
-                .fontSize(13)
-                .maxLines(1)
-                .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-            }
-            .backgroundColor(key === this.convId ? '#bbdefb' : '#eeeeee')
-            .borderRadius(16)
-            .margin({ left: 4, right: 4 })
-            .onClick(() => {
-              if (key !== this.convId) {
-                this.switchConversation(key)
-              }
-            })
-          })
-        }
-        .alignItems(Alignment.Center)
-        .width('100%')
-        .space(6)
-      }
-      .width('100%')
-      .height(52)
-      .scrollBar(BarState.Auto)
-    }
   }
 }
