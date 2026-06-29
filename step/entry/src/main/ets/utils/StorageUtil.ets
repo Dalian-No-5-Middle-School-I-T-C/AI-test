@@ -1,53 +1,59 @@
 import { PreferenceUtil } from './PreferenceUtil'
 
 const PREF_API_KEY = 'deepseek_api_key'
-const PREF_DEFAULT_MODEL = 'deepseek_default_model'
-const PREF_DEFAULT_THINK = 'deepseek_default_think'
-const PREF_HISTORY_KEY = 'deepseek_chat_history_key'
+const PREF_MODEL = 'deepseek_model'
+const PREF_THINK = 'deepseek_think'
+const PREF_MAP = 'deepseek_map'
 
 export class StorageUtil {
-  static async saveApiKey(key: string): Promise<void> {
-    PreferenceUtil.setStringSync(PREF_API_KEY, key)
+  static saveApiKey(key: string): void {
+    PreferenceUtil.setString(PREF_API_KEY, key)
   }
 
   static getApiKey(): string {
-    return PreferenceUtil.getStringSync(PREF_API_KEY, '')
+    return PreferenceUtil.getString(PREF_API_KEY, '')
   }
 
-  static async saveDefaultModel(model: string): Promise<void> {
-    PreferenceUtil.setStringSync(PREF_DEFAULT_MODEL, model)
+  static saveModel(model: string): void {
+    PreferenceUtil.setString(PREF_MODEL, model)
   }
 
-  static getDefaultModel(): string {
-    return PreferenceUtil.getStringSync(PREF_DEFAULT_MODEL, 'deepseek-v4-flash')
+  static getModel(): string {
+    return PreferenceUtil.getString(PREF_MODEL, 'deepseek-v4-flash')
   }
 
-  static async saveDefaultThink(depth: string): Promise<void> {
-    PreferenceUtil.setStringSync(PREF_DEFAULT_THINK, depth)
+  static saveThink(depth: string): void {
+    PreferenceUtil.setString(PREF_THINK, depth)
   }
 
-  static getDefaultThink(): string {
-    return PreferenceUtil.getStringSync(PREF_DEFAULT_THINK, 'off')
+  static getThink(): string {
+    return PreferenceUtil.getString(PREF_THINK, 'off')
   }
 
-  static async saveConversationMap(convMap: Map<string, string>): Promise<void> {
-    const obj: Record<string, string> = {}
-    convMap.forEach((v, k) => { obj[k] = v })
-    PreferenceUtil.setStringSync(PREF_HISTORY_KEY, JSON.stringify(obj))
+  static saveConvMap(mapData: Record<string, string>): void {
+    PreferenceUtil.setString(PREF_MAP, JSON.stringify(mapData))
   }
 
-  static loadConversationMap(): Map<string, string> {
-    const raw = PreferenceUtil.getStringSync(PREF_HISTORY_KEY, '')
-    if (!raw) return new Map()
+  static getConvMap(): Record<string, string> {
+    const raw = PreferenceUtil.getString(PREF_MAP, '')
+    if (!raw) return {}
     try {
-      const obj = JSON.parse(raw)
-      const m = new Map<string, string>()
-      for (const k of Object.keys(obj)) {
-        m.set(k, obj[k])
-      }
-      return m
+      return JSON.parse(raw) as Record<string, string>
     } catch (e) {
-      return new Map()
+      return {}
+    }
+  }
+
+  static saveMessages(id: string, arr: Object[]): void {
+    PreferenceUtil.setString('conv_' + id, JSON.stringify(arr))
+  }
+
+  static getMessages(id: string): Object[] {
+    const raw = PreferenceUtil.getString('conv_' + id, '[]')
+    try {
+      return JSON.parse(raw) as Object[]
+    } catch (e) {
+      return []
     }
   }
 }

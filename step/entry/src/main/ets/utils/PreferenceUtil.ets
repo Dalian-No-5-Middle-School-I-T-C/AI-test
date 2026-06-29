@@ -1,30 +1,30 @@
-import { UIAbilityContext, getContext } from '@kit.AbilityKit'
-import { preferences } from '@kit.ArkData'
+import { AbilityKit } from '@kit.AbilityKit'
+import { ArkData } from '@kit.ArkData'
 
-const PREFERENCES_NAME = 'ds_chat_prefs'
+const PREFS_NAME = 'ds_chat_prefs'
 
-let appContext: UIAbilityContext | null = null
-let prefInstance: preferences.Preferences | null = null
+let ctx: AbilityKit.Context | null = null
+let pref: ArkData.Preferences | null = null
 
-export function initAppContext(ability: any): void {
-  appContext = getContext(ability) as UIAbilityContext
+export function setContext(c: AbilityKit.Context): void {
+  ctx = c
 }
 
-function getPref(): preferences.Preferences {
-  if (prefInstance) return prefInstance
-  if (!appContext) {
-    throw new Error('AppContext not initialized, call initAppContext first')
+export function getPref(): ArkData.Preferences {
+  if (pref) return pref
+  if (!ctx) {
+    throw new Error('Context not set')
   }
-  prefInstance = preferences.getPreferencesSync(appContext, PREFERENCES_NAME)
-  return prefInstance
+  pref = ArkData.preferences.getPreferencesSync(ctx, PREFS_NAME)
+  return pref
 }
 
 export class PreferenceUtil {
-  static setStringSync(key: string, value: string): void {
+  static setString(key: string, value: string): void {
     getPref().putSync(key, value)
   }
 
-  static getStringSync(key: string, def: string): string {
+  static getString(key: string, def: string): string {
     try {
       return getPref().getSync(key, def)
     } catch (e) {

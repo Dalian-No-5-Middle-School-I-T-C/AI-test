@@ -1,78 +1,122 @@
-import { DsHttp } from '../utils/DsHttp'
-import { ThinkDepth } from '../model/ChatModel'
+import { http, HttpResponse } from '@kit.NetworkKit'
+import { StorageUtil } from '../utils/StorageUtil'
 
 const BASE_URL = 'https://api.deepseek.com'
 const CHAT_URL = BASE_URL + '/chat/completions'
-const MODELS_URL = BASE_URL + '/models'
+
+interface ReqOptions {
+  method: string
+  header: Record<string, string>
+  extraData: string
+  connectTimeout: number
+  readTimeout: number
+  usingCache: boolean
+}
 
 export class DeepSeekApi {
-  static async getModels(apiKey: string): Promise<string[]> {
-    const { data } = await DsHttp.postJson(MODELS_URL, apiKey, {})
-    if (data?.data?.id && Array.isArray(data.data.id)) {
-      return data.data.id
-    }
-    if (data?.id && Array.isArray(data.id)) {
-      return data.id
-    }
-    if (Array.isArray(data)) {
-      return data as string[]
-    }
+  static async getModels(): Promise<string[]> {
     return ['deepseek-v4-flash', 'deepseek-v4-pro']
   }
 
   static async chatStream(
-    apiKey: string,
     model: string,
-    messages: Array<{ role: string; content: string; reasoning_content?: string }>,
-    thinkDepth: ThinkDepth,
+    messages: Object[],
+    thinkDepth: string,
     onToken: (content: string, reasoning: string) => void,
   ): Promise<void> {
-    const enableThinking = thinkDepth !== ThinkDepth.OFF
-    const body: Record<string, any> = {
-      model,
-      messages,
+    const apiKey = StorageUtil.getApiKey()
+    const enableThinking = thinkDepth !== 'off'
+    const bodyObj: Record<string, Object> = {
+      model: model,
+      messages: messages,
       stream: true,
     }
     if (enableThinking) {
-      body.thinking = { type: 'enabled' }
-      body.reasoning_effort = thinkDepth
+      bodyObj['thinking'] = { type: 'enabled' }
+      bodyObj['reasoning_effort'] = thinkDepth
     }
-
-    const toolDefs = [
+    bodyObj['tools'] = [
       {
         type: 'function',
         function: {
           name: 'get_current_system_time',
           description: '获取当前手机系统时间',
-          parameters: {
-            type: 'object',
-            properties: {},
-            required: [],
-          },
+          parameters: { type: 'object', properties: {}, required: [] },
         },
       },
     ]
-    body.tools = toolDefs
 
-    await DsHttp.postStream(CHAT_URL, apiKey, body, (content, reasoning) => {
-      if (reasoning) {
-        onToken('', reasoning)
-      }
-      if (content) {
-        onToken(content, '')
-      }
-    })
-  }
+    const bodyStr = JSON.stringify(bodyObj)
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer ' + apiKey,
+    }
 
-  static buildMessages(
-    msgs: Array<{ role: string; content: string; reasoning?: string }>,
-  ): Array<{ role: string; content: string; reasoning_content?: string }> {
-    return msgs.map((m) => {
-      const item: any = { role: m.role, content: m.content }
-      if (m.reasoning) {
-        item.reasoning_content = m.reasoning
+    let response: HttpResponse | null = null
+    try {
+      const req = http.createHttp()
+      const resp = await req.request(CHAT_URL, {
+        method: http.RequestMethod.POST,
+        header: headers,
+        extraData: bodyStr,
+        connectTimeout: 60000,
+        readTimeout: 120000,
+        usingCache: false,
+      } as any)
+      response = resp
+    } catch (e) {
+      return
+    }
+
+    if (!response || !response.result) {
+      return
+    }
+
+    let buf = ''
+    const reader = response.result as any
+    while (true) {
+      const chunkObj = await reader.read(4096)
+      if (!chunkObj) break
+      const val = chunkObj.value
+      const finished = chunkObj.finished
+      if (typeof val === 'string') {
+        buf += val
       }
-      return item
-    })
+      if (finished === true) break
+    }
+
+    try {
+      reader.release()
+    } catch (e) {}
+
+    let start = 0
+    const bufStr = buf as string
+    while (true) {
+      const idx = bufStr.indexOf('\n', start)
+      if (idx < 0) break
+      const line = bufStr.substring(start, idx).trim()
+      start = idx + 1
+      if (line.startsWith('data: ')) {
+        const data = line.substring(6)
+        if (data === '[DONE]') continue
+        try {
+          const parsed = JSON.parse(data)
+          const arr = parsed['choices']
+          if (arr && arr.length > 0) {
+            const delta = arr[0]['delta']
+            if (delta) {
+              const content = delta['content']
+              const reasoning = delta['reasoning_content']
+              if (typeof content === 'string' && content.length > 0) {
+                onToken(content, '')
+              }
+              if (typeof reasoning === 'string' && reasoning.length > 0) {
+                onToken('', reasoning)
+              }
+            }
+          }
+        } catch (e) {}
+      }
+    }
   }
 }
