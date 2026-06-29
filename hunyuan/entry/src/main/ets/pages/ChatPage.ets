@@ -1,6 +1,10 @@
 // ChatPage.ets - 主聊天页面（ArkTS 严格模式最终版）
 import router from '@ohos.router';
-import { generateId, initStorageContext } from '../service/StorageService';
+import {
+  loadSettings, saveSettings,
+  loadConversations, saveConversations,
+  generateId, initStorageContext
+} from '../service/StorageService';
 import { MessageRole, Conversation, ChatMessage, AppSettings, ToolCallItem, ToolDefinition, ToolCallResult } from '../model/ChatModels';
 import { DeepSeekService, StreamCallbacks, ToolExecutor } from '../service/DeepSeekService';
 import { MessageBubble } from '../components/MessageBubble';
