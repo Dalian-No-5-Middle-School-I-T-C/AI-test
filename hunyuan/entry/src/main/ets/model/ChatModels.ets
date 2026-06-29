@@ -1,6 +1,6 @@
 // ChatModels.ets - 数据模型定义（ArkTS 严格模式最终版）
 /**
- * 聊天消息角色
+ * 聊天消息角色（字符串枚举，值与 DeepSeek API 一致）
  */
 export enum MessageRole {
   System = 'system',
@@ -30,11 +30,11 @@ export interface ToolCallItem {
  * 单条聊天消息
  */
 export interface ChatMessage {
+  id: string;
   role: MessageRole;
   content: string;
   reasoning_content?: string;
   tool_calls?: ToolCallItem[];
-  id: string;
   timestamp: number;
 }
 
@@ -74,7 +74,6 @@ export interface ToolParameters {
  * 工具属性（用 class 包装，ArkTS 严格模式要求对象字面量对应显式类/接口）
  */
 export class ToolProperties {
-  // 空对象，ArkTS 要求用 class 实例而非 object literal
   constructor() {}
 }
 

@@ -1,6 +1,7 @@
 // DeepSeekService.ets - DeepSeek API 服务层（ArkTS 严格模式最终版）
 import http from '@ohos.net.http';
 import { BusinessError } from '@kit.BasicServicesKit';
+import util from '@ohos.util';
 import {
   ChatMessage, MessageRole, ToolCallItem, ToolDefinition, ToolCallResult,
   ToolFunctionDef, ToolParameters, ToolProperties
@@ -72,9 +73,12 @@ function getObjArr(obj: Object, key: string): Object[] {
 
 /**
  * DeepSeek API 服务
+ * 说明：ArkTS 不支持真正的 SSE 流式接收，
+ * 本实现采用「非流式请求 + 逐字回调」模拟流式效果。
  */
 export class DeepSeekService {
   private apiKey: string = '';
+  private textDecoder: util.TextDecoder = new util.TextDecoder('utf-8');
 
   setApiKey(key: string): void {
     this.apiKey = key;
@@ -85,7 +89,28 @@ export class DeepSeekService {
   }
 
   /**
-   * 流式聊天请求（SSE）
+   * 模拟流式输出：将完整文本逐字通过 onContent 回调传出
+   * 每次传出当前已累积的全文（便于 UI 直接赋值）
+   */
+  private simulateStreaming(fullText: string, onContent: (text: string) => void, done: () => void): void {
+    let idx: number = 0;
+    let current: string = '';
+    const timer: number = setInterval((): void => {
+      if (idx >= fullText.length) {
+        clearInterval(timer);
+        done();
+        return;
+      }
+      // 每次追加 1-3 个字符，模拟流式效果
+      const chunkSize: number = Math.min(3, fullText.length - idx);
+      current = current + fullText.substring(idx, idx + chunkSize);
+      idx = idx + chunkSize;
+      onContent(current);
+    }, 30);
+  }
+
+  /**
+   * 流式聊天请求（模拟流式：非流式请求 + 逐字回调）
    */
   async chatStream(
     messages: ChatMessage[],
@@ -95,68 +120,86 @@ export class DeepSeekService {
     callbacks: StreamCallbacks,
     tools?: ToolDefinition[]
   ): Promise<void> {
-    return new Promise<void>((resolve: () => void, reject: (reason: Object) => void) => {
-      const httpRequest: http.HttpRequest = http.createHttp();
-      const body: string = this.buildRequestBody(messages, model, thinkingEnabled, reasoningEffort, tools, true);
+    const httpRequest: http.HttpRequest = http.createHttp();
+    const body: string = this.buildRequestBody(messages, model, thinkingEnabled, reasoningEffort, tools, false);
 
-      let buffer: string = '';
-      let requestFailed: boolean = false;
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${this.apiKey}`,
+    };
 
-      httpRequest.on('dataReceive', (data: ArrayBuffer) => {
-        if (requestFailed) return;
-        const chunk: string = this.arrayBufferToString(data);
-        buffer = buffer + chunk;
-        const lines: string[] = buffer.split('\n');
-        buffer = lines.pop() || '';
-        for (const line of lines) {
-          this.handleSSELine(line, callbacks);
-        }
-      });
-
-      httpRequest.on('dataEnd', () => {
-        if (requestFailed) return;
-        if (buffer.trim()) {
-          this.handleSSELine(buffer, callbacks);
-        }
+    return new Promise<void>((resolve: (value: void) => void, reject: (reason: Object) => void) => {
+      httpRequest.request(BASE_URL, {
+        method: http.RequestMethod.POST,
+        header: headers,
+        extraData: body,
+        expectDataType: http.HttpDataType.STRING,
+      }, (err: BusinessError, data: http.HttpResponse): void => {
         httpRequest.destroy();
-        if (callbacks.onDone) callbacks.onDone();
-        resolve();
-      });
-
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.apiKey}`,
-        'Accept': 'text/event-stream',
-      };
-
-      // requestInStream 回调签名：(err: BusinessError, data: number) => void
-      // data 是请求 ID（number），不是 HttpResponse
-      try {
-        httpRequest.requestInStream(BASE_URL, {
-          method: http.RequestMethod.POST,
-          header: headers,
-          extraData: body,
-          expectDataType: http.HttpDataType.STRING,
-        }, (err: BusinessError, data: number) => {
-          if (err) {
-            requestFailed = true;
-            httpRequest.destroy();
-            const msg: string = `请求失败: ${err.code} ${err.message}`;
-            if (callbacks.onError) callbacks.onError(msg);
-            reject(new Error(msg));
+        if (err) {
+          const msg: string = `请求失败: ${err.code} ${err.message}`;
+          if (callbacks.onError) callbacks.onError(msg);
+          reject(new Error(msg));
+          return;
+        }
+        if (data.responseCode !== 200) {
+          const errMsg: string = `API 错误 ${data.responseCode}: ${data.result}`;
+          if (callbacks.onError) callbacks.onError(errMsg);
+          reject(new Error(errMsg));
+          return;
+        }
+        try {
+          const result: Object = JSON.parse(data.result as string);
+          const choices: Object[] = getObjArr(result, 'choices');
+          if (!choices || choices.length === 0) {
+            if (callbacks.onError) callbacks.onError('无效的 API 响应：无 choices');
+            reject(new Error('无效的 API 响应'));
+            return;
           }
-          // data 是请求 ID，非零表示成功发起
-        });
-      } catch (e) {
-        requestFailed = true;
-        if (callbacks.onError) callbacks.onError(`请求异常: ${(e as Error).message}`);
-        reject(e as Error);
-      }
+          const choice: Object = choices[0];
+          const msgObj: Object | undefined = (choice as Record<string, Object>)['message'];
+          const content: string = msgObj ? getStr(msgObj, 'content') : '';
+          const reasoning: string = msgObj ? getStr(msgObj, 'reasoning_content') : '';
+
+          // 回调思考内容（一次性传出）
+          if (reasoning && callbacks.onReasoning) {
+            callbacks.onReasoning(reasoning);
+          }
+
+          // 模拟流式输出内容
+          if (content && callbacks.onContent) {
+            this.simulateStreaming(content,
+              (text: string): void => {
+                if (callbacks.onContent) callbacks.onContent(text);
+              },
+              (): void => {
+                // 检查是否有工具调用
+                if (msgObj) {
+                  const tcRaw: Object = (msgObj as Record<string, Object>)['tool_calls'];
+                  if (tcRaw instanceof Array && tcRaw.length > 0) {
+                    const toolCalls: ToolCallItem[] = this.convertToToolCallItems(tcRaw as Object[]);
+                    if (callbacks.onToolCall) callbacks.onToolCall(toolCalls);
+                  }
+                }
+                if (callbacks.onDone) callbacks.onDone();
+                resolve();
+              }
+            );
+          } else {
+            if (callbacks.onDone) callbacks.onDone();
+            resolve();
+          }
+        } catch (e) {
+          const msg: string = `解析响应失败: ${(e as Error).message}`;
+          if (callbacks.onError) callbacks.onError(msg);
+          reject(new Error(msg));
+        }
+      });
     });
   }
 
   /**
-   * 非流式聊天请求
+   * 非流式聊天请求（直接返回完整消息）
    */
   async chatNonStream(
     messages: ChatMessage[],
@@ -201,52 +244,6 @@ export class DeepSeekService {
   }
 
   /**
-   * 处理单条 SSE 行
-   */
-  private handleSSELine(line: string, callbacks: StreamCallbacks): void {
-    const trimmed: string = line.trim();
-    if (!trimmed.startsWith('data:')) {
-      return;
-    }
-
-    const dataStr: string = trimmed.substring(5).trim();
-    if (dataStr === '[DONE]') {
-      return;
-    }
-
-    try {
-      const chunk: Object = JSON.parse(dataStr);
-      const choices: Object[] = getObjArr(chunk, 'choices');
-      if (!choices || choices.length === 0) return;
-
-      const choice: Object = choices[0];
-      const delta: Object | undefined = (choice as Record<string, Object>)['delta'];
-
-      if (delta) {
-        const reasoningText: string = getStr(delta, 'reasoning_content');
-        if (reasoningText && callbacks.onReasoning) {
-          callbacks.onReasoning(reasoningText);
-        }
-
-        const contentText: string = getStr(delta, 'content');
-        if (contentText && callbacks.onContent) {
-          callbacks.onContent(contentText);
-        }
-
-        const toolCallsRaw: Object = (delta as Record<string, Object>)['tool_calls'];
-        if (toolCallsRaw && callbacks.onToolCall) {
-          // 将原始 Object[] 转换为 ToolCallItem[]
-          const toolCallsArr: Object[] = toolCallsRaw instanceof Array ? toolCallsRaw as Object[] : [];
-          const converted: ToolCallItem[] = this.convertToToolCallItems(toolCallsArr);
-          callbacks.onToolCall(converted);
-        }
-      }
-    } catch {
-      // 忽略无法解析的行
-    }
-  }
-
-  /**
    * 将 Object[] 转换为 ToolCallItem[]（ArkTS 无 any 类型时的安全转换）
    */
   private convertToToolCallItems(raw: Object[]): ToolCallItem[] {
@@ -283,7 +280,7 @@ export class DeepSeekService {
   ): string {
     const apiMessages: ApiMessage[] = messages.map((m: ChatMessage): ApiMessage => {
       const msg: ApiMessage = {
-        role: m.role.toString(),
+        role: m.role as string,  // MessageRole 是字符串枚举，直接 as string
         content: m.content,
       };
       if (m.tool_calls && m.tool_calls.length > 0) {
@@ -295,7 +292,7 @@ export class DeepSeekService {
     const body: ApiRequestBody = {
       model: model,
       messages: apiMessages,
-      stream: stream,
+      stream: false, // 强制非流式，ArkTS 不支持真 SSE
     };
 
     if (thinkingEnabled) {
@@ -344,18 +341,6 @@ export class DeepSeekService {
       tool_calls: toolCalls,
       timestamp: Date.now(),
     };
-  }
-
-  /**
-   * ArrayBuffer 转 string（手动循环，ArkTS 兼容）
-   */
-  private arrayBufferToString(buffer: ArrayBuffer): string {
-    const uint8: Uint8Array = new Uint8Array(buffer);
-    let result: string = '';
-    for (let i: number = 0; i < uint8.length; i++) {
-      result = result + String.fromCharCode(uint8[i]);
-    }
-    return result;
   }
 
   /**

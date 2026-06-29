@@ -1,4 +1,4 @@
-// MessageBubble.ets - 消息气泡组件
+// MessageBubble.ets - 消息气泡组件（布局修复版）
 import { ChatMessage, MessageRole } from '../model/ChatModels';
 
 /**
@@ -57,6 +57,7 @@ export struct MessageBubble {
     .borderRadius(12)
     .border({ width: 1, color: '#EEEEEE' })
     .margin({ bottom: 4 })
+    .width('100%')
   }
 
   /**
@@ -66,12 +67,16 @@ export struct MessageBubble {
   buildContentSection() {
     Row() {
       if (this.message.role === MessageRole.User) {
-        // 用户消息：右对齐
+        // 用户消息：右对齐，推到右边
         Blank()
-        this.buildBubbleContent('#007DFF', '#FFFFFF', TextAlign.End)
+        this.buildBubbleContent('#007DFF', '#FFFFFF', true)
+      } else if (this.message.role === MessageRole.Tool) {
+        // 工具消息：左对齐，全宽显示
+        this.buildToolContent()
+        Blank()
       } else {
         // AI 消息：左对齐
-        this.buildBubbleContent('#F0F0F0', '#1A1A1A', TextAlign.Start)
+        this.buildBubbleContent('#F0F0F0', '#1A1A1A', false)
         Blank()
       }
     }
@@ -79,28 +84,46 @@ export struct MessageBubble {
   }
 
   /**
-   * 气泡内容
+   * 气泡内容（role 参数控制对齐方向）
+   * isUser: true → 右对齐；false → 左对齐
    */
   @Builder
-  buildBubbleContent(bgColor: string, textColor: string, align: TextAlign) {
+  buildBubbleContent(bgColor: string, textColor: string, isUser: boolean) {
     Column() {
-      if (this.message.role === MessageRole.Tool) {
-        Text(`🔧 工具结果: ${this.message.content}`)
-          .fontSize(13)
-          .fontColor('#888888')
-          .textAlign(TextAlign.Start)
-      } else {
-        Text(this.message.content || '...')
-          .fontSize(15)
-          .fontColor(textColor)
-          .lineHeight(24)
-          .textAlign(align)
-          .width('100%')
-      }
+      Text(this.message.content || '...')
+        .fontSize(15)
+        .fontColor(textColor)
+        .lineHeight(24)
+        .textAlign(isUser ? TextAlign.End : TextAlign.Start)
+        .width('100%')
     }
     .backgroundColor(bgColor)
     .borderRadius(16)
     .padding({ left: 14, right: 14, top: 10, bottom: 10 })
-    .constraintSize({ maxWidth: '78%' })
+    .constraintSize({ maxWidth: 260 })
+    .alignSelf(isUser ? ItemAlign.End : ItemAlign.Start)
+  }
+
+  /**
+   * 工具消息内容（左对齐，灰色小字）
+   */
+  @Builder
+  buildToolContent() {
+    Row() {
+      Text('🔧')
+        .fontSize(14)
+        .margin({ right: 6 })
+      Text(this.message.content || '')
+        .fontSize(13)
+        .fontColor('#888888')
+        .lineHeight(20)
+        .textAlign(TextAlign.Start)
+    }
+    .backgroundColor('#F5F5F5')
+    .borderRadius(12)
+    .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+    .border({ width: 1, color: '#DDDDDD' })
+    .constraintSize({ maxWidth: 260 })
+    .alignSelf(ItemAlign.Start)
   }
 }

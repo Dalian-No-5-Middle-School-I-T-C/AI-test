@@ -49,7 +49,8 @@ export async function loadSettings(): Promise<AppSettings | null> {
   const val: preferences.ValueType = await pref.get(SETTINGS_KEY, '');
   if (!val) return null;
   try {
-    return JSON.parse(val as string) as AppSettings;
+    const str: string = typeof val === 'string' ? val : String(val);
+    return JSON.parse(str) as AppSettings;
   } catch {
     return null;
   }
@@ -84,7 +85,8 @@ export async function loadConversations(): Promise<Conversation[]> {
   const val: preferences.ValueType = await pref.get(CONVERSATIONS_KEY, '[]');
   if (!val) return [];
   try {
-    return JSON.parse(val as string) as Conversation[];
+    const str: string = typeof val === 'string' ? val : String(val);
+    return JSON.parse(str) as Conversation[];
   } catch {
     return [];
   }

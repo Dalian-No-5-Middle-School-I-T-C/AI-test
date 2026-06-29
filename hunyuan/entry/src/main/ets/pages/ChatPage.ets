@@ -102,13 +102,17 @@ struct ChatPage {
     const callbacks: StreamCallbacks = {
       onReasoning: (text: string): void => {
         this.statusText = '思考中...';
-        const msg: ChatMessage = this.messages[assistantIndex];
-        if (msg) msg.reasoning_content = (msg.reasoning_content || '') + text;
+        const idx: number = assistantIndex;
+        if (idx >= 0 && idx < this.messages.length) {
+          this.messages[idx] = { ...this.messages[idx], reasoning_content: text };
+        }
       },
       onContent: (text: string): void => {
         this.statusText = '';
-        const msg: ChatMessage = this.messages[assistantIndex];
-        if (msg) msg.content = (msg.content || '') + text;
+        const idx: number = assistantIndex;
+        if (idx >= 0 && idx < this.messages.length) {
+          this.messages[idx] = { ...this.messages[idx], content: text };
+        }
       },
       onToolCall: (toolCalls: ToolCallItem[]): void => {
         this.pendingToolCalls = toolCalls;
@@ -169,6 +173,7 @@ struct ChatPage {
       onContent: (text: string): void => {
         this.statusText = '';
         let lastMsg: ChatMessage = this.messages[this.messages.length - 1];
+        let idx: number = this.messages.length - 1;
         if (!lastMsg || lastMsg.role !== MessageRole.Assistant) {
           const newMsg: ChatMessage = {
             id: generateId(),
@@ -178,9 +183,11 @@ struct ChatPage {
             timestamp: Date.now(),
           };
           this.messages.push(newMsg);
+          idx = this.messages.length - 1;
           lastMsg = newMsg;
         }
-        lastMsg.content = (lastMsg.content || '') + text;
+        // 替换数组元素以触发 UI 更新
+        this.messages[idx] = { ...this.messages[idx], content: text };
       },
       onDone: (): void => {
         this.isLoading = false;
