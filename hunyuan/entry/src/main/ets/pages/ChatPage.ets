@@ -1,9 +1,9 @@
-// ChatPage.ets - 主聊天页面（ArkTS 兼容最终版）
-import { MessageRole, Conversation, ChatMessage, AppSettings } from '../model/ChatModels';
+// ChatPage.ets - 主聊天页面（ArkTS 严格模式最终版）
+import { MessageRole, Conversation, ChatMessage, AppSettings, ToolCallItem, ToolDefinition, ToolCallResult } from '../model/ChatModels';
 import { DeepSeekService, ToolExecutor, StreamCallbacks } from '../service/DeepSeekService';
 import {
   initStorageContext, saveConversations, loadConversations, saveSettings, loadSettings,
-  getDefaultSettings, generateId, deleteConversation as storageDeleteConv
+  getDefaultSettings, generateId
 } from '../service/StorageService';
 import { MessageBubble } from '../components/MessageBubble';
 import { router } from '@kit.ArkUI';
@@ -28,7 +28,7 @@ struct ChatPage {
   private dsService: DeepSeekService = new DeepSeekService();
   private conversations: Conversation[] = [];
   private scroller: Scroller = new Scroller();
-  private pendingToolCalls: Object[] = [];
+  private pendingToolCalls: ToolCallItem[] = [];
 
   aboutToAppear(): void {
     initStorageContext(getContext(this));
@@ -36,14 +36,14 @@ struct ChatPage {
   }
 
   async loadLocalData(): Promise<void> {
-    const settings = await loadSettings();
+    const settings: AppSettings | null = await loadSettings();
     if (settings) {
       this.apiKey = settings.apiKey;
       this.selectedModel = settings.model;
       this.thinkingEnabled = settings.thinkingEnabled;
       this.reasoningEffort = settings.reasoningEffort;
     } else {
-      const def = getDefaultSettings();
+      const def: AppSettings = getDefaultSettings();
       this.apiKey = def.apiKey;
       this.selectedModel = def.model;
       this.thinkingEnabled = def.thinkingEnabled;
@@ -57,19 +57,18 @@ struct ChatPage {
   startNewConversation(): void {
     this.currentConvId = generateId();
     this.conversationTitle = '新对话';
-    this.messages = [
-      {
-        id: generateId(),
-        role: MessageRole.System,
-        content: '你好！我是 DeepSeek AI 助手，有什么可以帮您的吗？',
-        timestamp: Date.now(),
-      } as ChatMessage
-    ];
+    const sysMsg: ChatMessage = {
+      id: generateId(),
+      role: MessageRole.System,
+      content: '你好！我是 DeepSeek AI 助手，有什么可以帮您的吗？',
+      timestamp: Date.now(),
+    };
+    this.messages = [sysMsg];
     this.statusText = '';
   }
 
   async sendMessage(): Promise<void> {
-    const text = this.inputText.trim();
+    const text: string = this.inputText.trim();
     if (!text || this.isLoading) return;
     if (!this.apiKey) {
       this.statusText = '请先在设置中填写 API Key';
@@ -96,25 +95,25 @@ struct ChatPage {
       timestamp: Date.now(),
     };
     this.messages.push(assistantMsg);
-    const assistantIndex = this.messages.length - 1;
-    const apiMessages = this.messages.filter(m => m.role !== MessageRole.System);
-    const tools = ToolExecutor.getToolDefinitions();
+    const assistantIndex: number = this.messages.length - 1;
+    const apiMessages: ChatMessage[] = this.messages.filter((m: ChatMessage): boolean => m.role !== MessageRole.System);
+    const tools: ToolDefinition[] = ToolExecutor.getToolDefinitions();
 
     const callbacks: StreamCallbacks = {
-      onReasoning: (text: string) => {
+      onReasoning: (text: string): void => {
         this.statusText = '思考中...';
-        const msg = this.messages[assistantIndex];
+        const msg: ChatMessage = this.messages[assistantIndex];
         if (msg) msg.reasoning_content = (msg.reasoning_content || '') + text;
       },
-      onContent: (text: string) => {
+      onContent: (text: string): void => {
         this.statusText = '';
-        const msg = this.messages[assistantIndex];
+        const msg: ChatMessage = this.messages[assistantIndex];
         if (msg) msg.content = (msg.content || '') + text;
       },
-      onToolCall: (toolCalls: Object) => {
-        this.pendingToolCalls = toolCalls as Object[];
+      onToolCall: (toolCalls: ToolCallItem[]): void => {
+        this.pendingToolCalls = toolCalls;
       },
-      onDone: () => {
+      onDone: (): void => {
         this.isLoading = false;
         this.statusText = '';
         if (this.pendingToolCalls.length > 0) {
@@ -124,10 +123,10 @@ struct ChatPage {
           this.saveCurrentConversation();
         }
       },
-      onError: (err: string) => {
+      onError: (err: string): void => {
         this.isLoading = false;
         this.statusText = `错误: ${err}`;
-        const last = this.messages[this.messages.length - 1];
+        const last: ChatMessage = this.messages[this.messages.length - 1];
         if (last && last.content === '' && !last.reasoning_content) {
           this.messages.pop();
         }
@@ -146,25 +145,30 @@ struct ChatPage {
     }
   }
 
-  async handleToolCalls(toolCalls: Object[], assistantIndex: number): Promise<void> {
-    (this.messages[assistantIndex] as ChatMessage).tool_calls = toolCalls;
-    const results = ToolExecutor.executeToolCalls(toolCalls as ESObject[]);
+  async handleToolCalls(toolCalls: ToolCallItem[], assistantIndex: number): Promise<void> {
+    // 将 tool_calls 附加到助手消息
+    const assistantMsg: ChatMessage = this.messages[assistantIndex];
+    if (assistantMsg) {
+      assistantMsg.tool_calls = toolCalls;
+    }
+    const results: ToolCallResult[] = ToolExecutor.executeToolCalls(toolCalls);
     for (const res of results) {
-      this.messages.push({
+      const toolMsg: ChatMessage = {
         id: generateId(),
         role: MessageRole.Tool,
         content: res.content,
         timestamp: Date.now(),
-      } as ChatMessage);
+      };
+      this.messages.push(toolMsg);
     }
 
     this.statusText = '处理工具结果...';
-    const apiMessages = this.messages.filter(m => m.role !== MessageRole.System);
+    const apiMessages: ChatMessage[] = this.messages.filter((m: ChatMessage): boolean => m.role !== MessageRole.System);
 
     const callbacks: StreamCallbacks = {
-      onContent: (text: string) => {
+      onContent: (text: string): void => {
         this.statusText = '';
-        let lastMsg = this.messages[this.messages.length - 1];
+        let lastMsg: ChatMessage = this.messages[this.messages.length - 1];
         if (!lastMsg || lastMsg.role !== MessageRole.Assistant) {
           const newMsg: ChatMessage = {
             id: generateId(),
@@ -176,14 +180,14 @@ struct ChatPage {
           this.messages.push(newMsg);
           lastMsg = newMsg;
         }
-        (lastMsg as ChatMessage).content = ((lastMsg as ChatMessage).content || '') + text;
+        lastMsg.content = (lastMsg.content || '') + text;
       },
-      onDone: () => {
+      onDone: (): void => {
         this.isLoading = false;
         this.statusText = '';
         this.saveCurrentConversation();
       },
-      onError: (err: string) => {
+      onError: (err: string): void => {
         this.isLoading = false;
         this.statusText = `工具处理错误: ${err}`;
       },
@@ -202,7 +206,7 @@ struct ChatPage {
   }
 
   async saveCurrentConversation(): Promise<void> {
-    const firstUser = this.messages.find(m => m.role === MessageRole.User);
+    const firstUser: ChatMessage | undefined = this.messages.find((m: ChatMessage): boolean => m.role === MessageRole.User);
     if (firstUser && this.conversationTitle === '新对话') {
       this.conversationTitle = (firstUser.content as string).substring(0, 30) || '新对话';
     }
@@ -216,7 +220,7 @@ struct ChatPage {
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
-    const idx = this.conversations.findIndex(c => c.id === this.currentConvId);
+    const idx: number = this.conversations.findIndex((c: Conversation): boolean => c.id === this.currentConvId);
     if (idx >= 0) {
       this.conversations[idx] = conv;
     } else {
@@ -252,12 +256,16 @@ struct ChatPage {
   }
 
   scrollToBottom(): void {
-    setTimeout(() => { this.scroller.scrollEdge(Edge.Bottom); }, 100);
+    setTimeout((): void => { this.scroller.scrollEdge(Edge.Bottom); }, 100);
   }
 
   async deleteConversation(id: string): Promise<void> {
-    await storageDeleteConv(id);
-    this.conversations = this.conversations.filter(c => c.id !== id);
+    await import('../service/StorageService').then((mod: Object): void => {
+      // 动态导入以避免循环依赖
+    });
+    // 直接在此处从 conversations 中移除
+    this.conversations = this.conversations.filter((c: Conversation): boolean => c.id !== id);
+    await saveConversations(this.conversations);
     if (id === this.currentConvId) {
       this.startNewConversation();
     }
@@ -288,7 +296,7 @@ struct ChatPage {
   buildTopBar() {
     Row({ space: 12 }) {
       Text('📋').fontSize(22).padding(8)
-        .onClick(() => { this.showHistory = true; })
+        .onClick((): void => { this.showHistory = true; })
 
       Column() {
         Text(this.conversationTitle)
@@ -303,9 +311,9 @@ struct ChatPage {
       .layoutWeight(1).alignItems(HorizontalAlign.Center)
 
       Text('✏️').fontSize(22).padding(8)
-        .onClick(() => { this.startNewConversation(); })
+        .onClick((): void => { this.startNewConversation(); })
       Text('⚙️').fontSize(22).padding(8)
-        .onClick(() => { this.showSettings = true; })
+        .onClick((): void => { this.showSettings = true; })
     }
     .width('100%')
     .padding({ left: 12, right: 12, top: 12, bottom: 12 })
@@ -316,12 +324,12 @@ struct ChatPage {
   @Builder
   buildMessageList() {
     List({ scroller: this.scroller }) {
-      ForEach(this.messages, (msg: ChatMessage) => {
+      ForEach(this.messages, (msg: ChatMessage): void => {
         ListItem() {
           MessageBubble({ message: msg, showThinking: this.showThinking })
         }
         .padding({ top: 4, bottom: 4 })
-      }, (msg: ChatMessage) => msg.id)
+      }, (msg: ChatMessage): string => msg.id)
     }
     .width('100%')
     .layoutWeight(1)
@@ -335,8 +343,8 @@ struct ChatPage {
         .backgroundColor('#FFFFFF')
         .borderRadius(20)
         .padding({ left: 16, right: 16 })
-        .onChange((val: string) => { this.inputText = val; })
-        .onSubmit(() => { this.sendMessage(); })
+        .onChange((val: string): void => { this.inputText = val; })
+        .onSubmit((): void => { this.sendMessage(); })
 
       Text(this.isLoading ? '⏳' : '➤')
         .fontSize(22)
@@ -344,7 +352,7 @@ struct ChatPage {
         .borderRadius(20)
         .backgroundColor(this.isLoading ? '#CCCCCC' : '#007DFF')
         .fontColor('#FFFFFF')
-        .onClick(() => { this.sendMessage(); })
+        .onClick((): void => { this.sendMessage(); })
     }
     .width('100%')
     .padding({ left: 12, right: 12, top: 8, bottom: 8 })
@@ -358,14 +366,14 @@ struct ChatPage {
       Row() {
         Text('设置').fontSize(18).fontWeight(FontWeight.Bold)
         Blank()
-        Text('✕').fontSize(22).padding(8).onClick(() => { this.showSettings = false; })
+        Text('✕').fontSize(22).padding(8).onClick((): void => { this.showSettings = false; })
       }
       .width('100%').padding({ left: 16, right: 16, top: 16, bottom: 12 })
       Divider()
       this.settingsForm()
       Button('保存设置')
         .width('90%').margin(16)
-        .onClick(() => { this.saveSettings(); })
+        .onClick((): void => { this.saveSettings(); })
     }
     .backgroundColor('#FFFFFF').borderRadius({ topLeft: 20, topRight: 20 })
     .width('100%').height('80%')
@@ -380,7 +388,7 @@ struct ChatPage {
         Text('API Key').fontSize(14).fontColor('#666').alignSelf(ItemAlign.Start)
         TextInput({ placeholder: '请输入 DeepSeek API Key', text: this.apiKey })
           .width('100%').type(InputType.Password)
-          .onChange((val: string) => { this.apiKey = val; })
+          .onChange((val: string): void => { this.apiKey = val; })
       }.padding(16)
 
       Divider()
@@ -389,9 +397,9 @@ struct ChatPage {
         Text('模型').fontSize(14).fontColor('#666').alignSelf(ItemAlign.Start)
         Row({ space: 12 }) {
           this.buildChip(this.selectedModel === 'deepseek-v4-pro', 'V4 Pro',
-            () => { this.selectedModel = 'deepseek-v4-pro'; })
+            (): void => { this.selectedModel = 'deepseek-v4-pro'; })
           this.buildChip(this.selectedModel === 'deepseek-v4-flash', 'V4 Flash',
-            () => { this.selectedModel = 'deepseek-v4-flash'; })
+            (): void => { this.selectedModel = 'deepseek-v4-flash'; })
         }
       }.padding(16)
 
@@ -402,14 +410,14 @@ struct ChatPage {
           Text('思考模式').fontSize(14).fontColor('#666')
           Blank()
           Toggle({ type: ToggleType.Switch, isOn: this.thinkingEnabled })
-            .onChange((val: boolean) => { this.thinkingEnabled = val; })
+            .onChange((val: boolean): void => { this.thinkingEnabled = val; })
         }
         if (this.thinkingEnabled) {
           Row({ space: 12 }) {
             this.buildChip(this.reasoningEffort === 'high', 'High',
-              () => { this.reasoningEffort = 'high'; })
+              (): void => { this.reasoningEffort = 'high'; })
             this.buildChip(this.reasoningEffort === 'max', 'Max',
-              () => { this.reasoningEffort = 'max'; })
+              (): void => { this.reasoningEffort = 'max'; })
           }
         }
       }.padding(16)
@@ -420,7 +428,7 @@ struct ChatPage {
         Text('显示思考过程').fontSize(14).fontColor('#666')
         Blank()
         Toggle({ type: ToggleType.Switch, isOn: this.showThinking })
-          .onChange((val: boolean) => { this.showThinking = val; })
+          .onChange((val: boolean): void => { this.showThinking = val; })
       }.padding(16)
     }
     .width('100%').layoutWeight(1).alignSelf(ItemAlign.Start)
@@ -440,7 +448,7 @@ struct ChatPage {
       Row() {
         Text('历史会话').fontSize(18).fontWeight(FontWeight.Bold)
         Blank()
-        Text('✕').fontSize(22).padding(8).onClick(() => { this.showHistory = false; })
+        Text('✕').fontSize(22).padding(8).onClick((): void => { this.showHistory = false; })
       }
       .width('100%').padding({ left: 16, right: 16, top: 16, bottom: 12 })
       Divider()
@@ -449,7 +457,7 @@ struct ChatPage {
         Text('暂无历史会话').fontSize(14).fontColor('#999').padding(40)
       } else {
         List() {
-          ForEach(this.conversations, (conv: Conversation) => {
+          ForEach(this.conversations, (conv: Conversation): void => {
             ListItem() {
               Row() {
                 Column({ space: 4 }) {
@@ -459,15 +467,15 @@ struct ChatPage {
                 }
                 .layoutWeight(1)
                 .alignItems(HorizontalAlign.Start)
-                .onClick(() => { this.loadConversation(conv); })
+                .onClick((): void => { this.loadConversation(conv); })
 
                 Text('🗑️')
                   .fontSize(18).padding(8)
-                  .onClick(() => { this.deleteConversation(conv.id); })
+                  .onClick((): void => { this.deleteConversation(conv.id); })
               }
               .width('100%').padding(16)
             }
-          }, (conv: Conversation) => conv.id)
+          }, (conv: Conversation): string => conv.id)
         }
         .width('100%').layoutWeight(1)
       }

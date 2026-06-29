@@ -1,4 +1,4 @@
-// ChatModels.ets - 数据模型定义（ArkTS 严格模式兼容）
+// ChatModels.ets - 数据模型定义（ArkTS 严格模式最终版）
 /**
  * 聊天消息角色
  */
@@ -10,15 +10,20 @@ export enum MessageRole {
 }
 
 /**
+ * ToolCallItem 中的 function 字段
+ */
+export interface ToolCallItemFunction {
+  name: string;
+  arguments: string;
+}
+
+/**
  * 工具调用项（API 返回）
  */
 export interface ToolCallItem {
   id: string;
   type: string;
-  function: {
-    name: string;
-    arguments: string;
-  };
+  function: ToolCallItemFunction;
 }
 
 /**
@@ -53,7 +58,24 @@ export interface Conversation {
 export interface ToolFunctionDef {
   name: string;
   description: string;
-  parameters: Record<string, Object>;
+  parameters: ToolParameters;
+}
+
+/**
+ * 工具参数定义
+ */
+export interface ToolParameters {
+  type: string;
+  properties: ToolProperties;
+  required: string[];
+}
+
+/**
+ * 工具属性（用 class 包装，ArkTS 严格模式要求对象字面量对应显式类/接口）
+ */
+export class ToolProperties {
+  // 空对象，ArkTS 要求用 class 实例而非 object literal
+  constructor() {}
 }
 
 /**

@@ -1,16 +1,20 @@
-// StorageService.ets - 本地存储服务（ArkTS Promise 版）
-import { preferences } from '@kit.ArkData';
-import { BusinessError } from '@kit.BasicServicesKit';
+// StorageService.ets - 本地存储服务（ArkTS 严格模式最终版）
+// 说明：preferences.getPreferences 需要 Context 类型，
+// 从 @ohos.arkui 导入 Context（HarmonyOS NEXT API 12+）
+import preferences from '@ohos.data.preferences';
+import { Context } from '@ohos.arkui';
 import { AppSettings, Conversation } from '../model/ChatModels';
 
-const SETTINGS_KEY = 'app_settings';
-const CONVERSATIONS_KEY = 'conversations';
-const PREF_NAME = 'dschat_pref';
+const SETTINGS_KEY: string = 'app_settings';
+const CONVERSATIONS_KEY: string = 'conversations';
+const PREF_NAME: string = 'dschat_pref';
 
 let _prefContext: Context | undefined = undefined;
 
 /**
- * 初始化存储上下文（在 UI 页面 aboutToAppear 中调用一次）
+ * 初始化存储上下文
+ * 在 UI 页面的 aboutToAppear 中调用一次：
+ *   initStorageContext(getContext(this) as Context)
  */
 export function initStorageContext(ctx: Context): void {
   _prefContext = ctx;
@@ -18,13 +22,13 @@ export function initStorageContext(ctx: Context): void {
 
 function getPrefContext(): Context {
   if (!_prefContext) {
-    throw new Error('StorageService 未初始化，请先调用 initStorageContext(ctx)');
+    throw new Error('StorageService 未初始化，请先调用 initStorageContext(getContext(this))');
   }
   return _prefContext;
 }
 
 async function getPreferences(): Promise<preferences.Preferences> {
-  const ctx = getPrefContext();
+  const ctx: Context = getPrefContext();
   return preferences.getPreferences(ctx, PREF_NAME);
 }
 
@@ -32,7 +36,7 @@ async function getPreferences(): Promise<preferences.Preferences> {
  * 保存设置
  */
 export async function saveSettings(settings: AppSettings): Promise<void> {
-  const pref = await getPreferences();
+  const pref: preferences.Preferences = await getPreferences();
   await pref.put(SETTINGS_KEY, JSON.stringify(settings));
   await pref.flush();
 }
@@ -41,8 +45,8 @@ export async function saveSettings(settings: AppSettings): Promise<void> {
  * 读取设置
  */
 export async function loadSettings(): Promise<AppSettings | null> {
-  const pref = await getPreferences();
-  const val = await pref.get(SETTINGS_KEY, '');
+  const pref: preferences.Preferences = await getPreferences();
+  const val: preferences.ValueType = await pref.get(SETTINGS_KEY, '');
   if (!val) return null;
   try {
     return JSON.parse(val as string) as AppSettings;
@@ -67,7 +71,7 @@ export function getDefaultSettings(): AppSettings {
  * 保存所有会话
  */
 export async function saveConversations(conversations: Conversation[]): Promise<void> {
-  const pref = await getPreferences();
+  const pref: preferences.Preferences = await getPreferences();
   await pref.put(CONVERSATIONS_KEY, JSON.stringify(conversations));
   await pref.flush();
 }
@@ -76,8 +80,8 @@ export async function saveConversations(conversations: Conversation[]): Promise<
  * 读取所有会话
  */
 export async function loadConversations(): Promise<Conversation[]> {
-  const pref = await getPreferences();
-  const val = await pref.get(CONVERSATIONS_KEY, '[]');
+  const pref: preferences.Preferences = await getPreferences();
+  const val: preferences.ValueType = await pref.get(CONVERSATIONS_KEY, '[]');
   if (!val) return [];
   try {
     return JSON.parse(val as string) as Conversation[];
@@ -90,8 +94,10 @@ export async function loadConversations(): Promise<Conversation[]> {
  * 删除指定会话
  */
 export async function deleteConversation(conversationId: string): Promise<void> {
-  const conversations = await loadConversations();
-  const filtered = conversations.filter(c => c.id !== conversationId);
+  const conversations: Conversation[] = await loadConversations();
+  const filtered: Conversation[] = conversations.filter(
+    (c: Conversation): boolean => c.id !== conversationId
+  );
   await saveConversations(filtered);
 }
 
