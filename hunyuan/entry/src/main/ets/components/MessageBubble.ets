@@ -65,17 +65,18 @@ export struct MessageBubble {
    */
   @Builder
   buildContentSection() {
+    // 用 Row + Blank() 控制左右对齐
     Row() {
       if (this.message.role === MessageRole.User) {
-        // 用户消息：右对齐，推到右边
+        // 用户消息：Blank 推到右边
         Blank()
         this.buildBubbleContent('#007DFF', '#FFFFFF', true)
       } else if (this.message.role === MessageRole.Tool) {
-        // 工具消息：左对齐，全宽显示
+        // 工具消息：左边显示
         this.buildToolContent()
         Blank()
       } else {
-        // AI 消息：左对齐
+        // AI 消息：左边显示
         this.buildBubbleContent('#F0F0F0', '#1A1A1A', false)
         Blank()
       }
@@ -84,8 +85,8 @@ export struct MessageBubble {
   }
 
   /**
-   * 气泡内容（role 参数控制对齐方向）
-   * isUser: true → 右对齐；false → 左对齐
+   * 气泡内容
+   * isUser: true  → 右边（用户）；false → 左边（AI）
    */
   @Builder
   buildBubbleContent(bgColor: string, textColor: string, isUser: boolean) {
@@ -100,12 +101,13 @@ export struct MessageBubble {
     .backgroundColor(bgColor)
     .borderRadius(16)
     .padding({ left: 14, right: 14, top: 10, bottom: 10 })
-    .constraintSize({ maxWidth: 260 })
+    // 关键：限制气泡最大宽度为屏幕 72%，防止短消息跑出屏幕
+    .width(isUser ? '72%' : '72%')
     .alignSelf(isUser ? ItemAlign.End : ItemAlign.Start)
   }
 
   /**
-   * 工具消息内容（左对齐，灰色小字）
+   * 工具消息内容
    */
   @Builder
   buildToolContent() {
@@ -123,7 +125,7 @@ export struct MessageBubble {
     .borderRadius(12)
     .padding({ left: 12, right: 12, top: 8, bottom: 8 })
     .border({ width: 1, color: '#DDDDDD' })
-    .constraintSize({ maxWidth: 260 })
+    .width('72%')
     .alignSelf(ItemAlign.Start)
   }
 }
