@@ -1,21 +1,21 @@
-import { AbilityKit } from '@kit.AbilityKit'
-import { ArkData } from '@kit.ArkData'
+import { UIAbility, Context } from '@kit.AbilityKit'
+import { preferences } from '@kit.ArkData'
 
-const PREFS_NAME = 'ds_chat_prefs'
+const PREFS_NAME: string = 'ds_chat_prefs'
 
-let ctx: AbilityKit.Context | null = null
-let pref: ArkData.Preferences | null = null
+let ctx: Context | null = null
+let pref: preferences.Preferences | null = null
 
-export function setContext(c: AbilityKit.Context): void {
+export function setContext(c: Context): void {
   ctx = c
 }
 
-export function getPref(): ArkData.Preferences {
+function getPref(): preferences.Preferences {
   if (pref) return pref
   if (!ctx) {
     throw new Error('Context not set')
   }
-  pref = ArkData.preferences.getPreferencesSync(ctx, PREFS_NAME)
+  pref = preferences.getPreferencesSync(ctx, PREFS_NAME)
   return pref
 }
 

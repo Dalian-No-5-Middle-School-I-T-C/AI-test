@@ -1,9 +1,9 @@
 import { PreferenceUtil } from './PreferenceUtil'
 
-const PREF_API_KEY = 'deepseek_api_key'
-const PREF_MODEL = 'deepseek_model'
-const PREF_THINK = 'deepseek_think'
-const PREF_MAP = 'deepseek_map'
+const PREF_API_KEY: string = 'deepseek_api_key'
+const PREF_MODEL: string = 'deepseek_model'
+const PREF_THINK: string = 'deepseek_think'
+const PREF_MAP: string = 'deepseek_map'
 
 export class StorageUtil {
   static saveApiKey(key: string): void {
@@ -30,15 +30,17 @@ export class StorageUtil {
     return PreferenceUtil.getString(PREF_THINK, 'off')
   }
 
-  static saveConvMap(mapData: Record<string, string>): void {
+  static saveConvMap(mapData: Object): void {
     PreferenceUtil.setString(PREF_MAP, JSON.stringify(mapData))
   }
 
-  static getConvMap(): Record<string, string> {
-    const raw = PreferenceUtil.getString(PREF_MAP, '')
-    if (!raw) return {}
+  static getConvMap(): Object {
+    const raw: string = PreferenceUtil.getString(PREF_MAP, '')
+    if (raw === '') {
+      return {}
+    }
     try {
-      return JSON.parse(raw) as Record<string, string>
+      return JSON.parse(raw)
     } catch (e) {
       return {}
     }
@@ -49,9 +51,9 @@ export class StorageUtil {
   }
 
   static getMessages(id: string): Object[] {
-    const raw = PreferenceUtil.getString('conv_' + id, '[]')
+    const raw: string = PreferenceUtil.getString('conv_' + id, '[]')
     try {
-      return JSON.parse(raw) as Object[]
+      return JSON.parse(raw)
     } catch (e) {
       return []
     }
