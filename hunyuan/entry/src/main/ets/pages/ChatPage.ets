@@ -110,7 +110,7 @@ export struct ChatPage {
 
   scrollToBottom(): void {
     setTimeout((): void => {
-      this.scroller.scrollToIndex(this.messages.length - 1, true, ScrollAlign.BOTTOM);
+      this.scroller.scrollToIndex(this.messages.length - 1);
     }, 100);
   }
 
