@@ -104,14 +104,30 @@ struct ChatPage {
         this.statusText = '思考中...';
         const idx: number = assistantIndex;
         if (idx >= 0 && idx < this.messages.length) {
-          this.messages[idx] = { ...this.messages[idx], reasoning_content: text };
+          const old: ChatMessage = this.messages[idx];
+          this.messages[idx] = {
+            id: old.id,
+            role: old.role,
+            content: old.content,
+            reasoning_content: text,
+            tool_calls: old.tool_calls,
+            timestamp: old.timestamp,
+          };
         }
       },
       onContent: (text: string): void => {
         this.statusText = '';
         const idx: number = assistantIndex;
         if (idx >= 0 && idx < this.messages.length) {
-          this.messages[idx] = { ...this.messages[idx], content: text };
+          const old: ChatMessage = this.messages[idx];
+          this.messages[idx] = {
+            id: old.id,
+            role: old.role,
+            content: text,
+            reasoning_content: old.reasoning_content,
+            tool_calls: old.tool_calls,
+            timestamp: old.timestamp,
+          };
         }
       },
       onToolCall: (toolCalls: ToolCallItem[]): void => {
@@ -187,7 +203,15 @@ struct ChatPage {
           lastMsg = newMsg;
         }
         // 替换数组元素以触发 UI 更新
-        this.messages[idx] = { ...this.messages[idx], content: text };
+        const oldMsg: ChatMessage = this.messages[idx];
+        this.messages[idx] = {
+          id: oldMsg.id,
+          role: oldMsg.role,
+          content: text,
+          reasoning_content: oldMsg.reasoning_content,
+          tool_calls: oldMsg.tool_calls,
+          timestamp: oldMsg.timestamp,
+        };
       },
       onDone: (): void => {
         this.isLoading = false;
