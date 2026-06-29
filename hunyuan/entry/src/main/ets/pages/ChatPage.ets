@@ -153,9 +153,17 @@ export struct ChatPage {
     this.messages.push(assistantMsg);
     const assistantIdx: number = this.messages.length - 1;
 
-    const apiMessages: ChatMessage[] = this.messages.filter(
-      (m: ChatMessage): boolean => m.role !== MessageRole.System
-    );
+    // 构建发给 API 的消息列表：排除空内容的非用户消息（如占位 assistant）
+    const apiMessages: ChatMessage[] = [];
+    for (const m of this.messages) {
+      if (m.role === MessageRole.System) continue;
+      // 跳过 content 为空且没有 tool_calls 的 assistant/tool 消息
+      if ((m.role === MessageRole.Assistant || m.role === MessageRole.Tool) &&
+          (!m.content || m.content.length === 0) && (!m.tool_calls || m.tool_calls.length === 0)) {
+        continue;
+      }
+      apiMessages.push(m);
+    }
     const tools: ToolDefinition[] = ToolExecutor.getToolDefinitions();
 
     const callbacks: StreamCallbacks = {
@@ -216,7 +224,7 @@ export struct ChatPage {
     };
 
     try {
-      await this.dsService.chatStream(
+      await this.dsService.chat(
         apiMessages, this.selectedModel,
         this.thinkingEnabled, this.reasoningEffort,
         callbacks, tools
@@ -265,10 +273,16 @@ export struct ChatPage {
 
     this.statusText = '处理工具结果...';
 
-    // 重新构建 apiMessages（不含 System）
-    const apiMessages: ChatMessage[] = this.messages.filter(
-      (m: ChatMessage): boolean => m.role !== MessageRole.System
-    );
+    // 重新构建 apiMessages：排除空内容的非用户消息
+    const apiMessages: ChatMessage[] = [];
+    for (const m of this.messages) {
+      if (m.role === MessageRole.System) continue;
+      if ((m.role === MessageRole.Assistant || m.role === MessageRole.Tool) &&
+          (!m.content || m.content.length === 0) && (!m.tool_calls || m.tool_calls.length === 0)) {
+        continue;
+      }
+      apiMessages.push(m);
+    }
 
     // 创建一个新的 assistant 占位（接收工具调用后的最终回复）
     const finalAssistantMsg: ChatMessage = {
@@ -323,7 +337,7 @@ export struct ChatPage {
     };
 
     try {
-      await this.dsService.chatStream(
+      await this.dsService.chat(
         apiMessages, this.selectedModel,
         this.thinkingEnabled, this.reasoningEffort,
         callbacks, ToolExecutor.getToolDefinitions()
@@ -447,15 +461,16 @@ export struct ChatPage {
 
   @Builder
   buildSettingsPanel() {
-    Column() {
-      // 遮罩
+    // 用 Stack 让遮罩和内容叠加，而不是纵向排列
+    Stack() {
+      // 遮罩（全屏，点击关闭）
       Column()
         .width('100%')
         .height('100%')
         .backgroundColor('#80000000')
         .onClick((): void => { this.showSettings = false; })
 
-      // 设置内容
+      // 设置内容（右侧 85% 宽度）
       Column({ space: 16 }) {
         Text('设置')
           .fontSize(18)
@@ -561,15 +576,16 @@ export struct ChatPage {
 
   @Builder
   buildHistoryPanel() {
-    Column() {
-      // 遮罩
+    // 用 Stack 让遮罩和内容叠加
+    Stack() {
+      // 遮罩（全屏，点击关闭）
       Column()
         .width('100%')
         .height('100%')
         .backgroundColor('#80000000')
         .onClick((): void => { this.showHistory = false; })
 
-      // 历史内容
+      // 历史内容（左侧 85% 宽度）
       Column({ space: 12 }) {
         Text('历史对话')
           .fontSize(18)
