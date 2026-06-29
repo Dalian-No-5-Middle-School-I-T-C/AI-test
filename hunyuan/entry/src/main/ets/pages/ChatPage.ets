@@ -136,7 +136,7 @@ export struct ChatPage {
       content: userContent,
       timestamp: Date.now(),
     };
-    this.messages.push(userMsg);
+    this.messages = [...this.messages, userMsg];
     this.inputText = '';
     this.isLoading = true;
     this.statusText = this.thinkingEnabled ? '思考中...' : '回复中...';
@@ -150,7 +150,7 @@ export struct ChatPage {
       reasoning_content: '',
       timestamp: Date.now(),
     };
-    this.messages.push(assistantMsg);
+    this.messages = [...this.messages, assistantMsg];
     const assistantIdx: number = this.messages.length - 1;
 
     // 构建发给 API 的消息列表：排除空内容的非用户消息（如占位 assistant）
@@ -253,31 +253,35 @@ export struct ChatPage {
    * 处理工具调用，并把结果发回模型
    */
   async handleToolCalls(toolCalls: ToolCallItem[], assistantIdx: number): Promise<void> {
-    // 把 tool_calls 附到占位消息上
+    // 把 tool_calls 附到占位消息上（整体替换触发 UI 更新）
     if (assistantIdx >= 0 && assistantIdx < this.messages.length) {
-      const old: ChatMessage = this.messages[assistantIdx];
-      this.messages[assistantIdx] = {
-        id: old.id,
-        role: old.role,
-        content: old.content,
-        reasoning_content: old.reasoning_content,
+      const updated: ChatMessage[] = [...this.messages];
+      updated[assistantIdx] = {
+        id: updated[assistantIdx].id,
+        role: updated[assistantIdx].role,
+        content: updated[assistantIdx].content,
+        reasoning_content: updated[assistantIdx].reasoning_content,
         tool_calls: toolCalls,
-        timestamp: old.timestamp,
+        timestamp: updated[assistantIdx].timestamp,
       };
+      this.messages = updated;
     }
 
     const results: ToolCallResult[] = ToolExecutor.executeToolCalls(toolCalls);
 
-    // 把工具结果作为 Tool 消息加入（必须带 tool_call_id）
-    for (const res of results) {
-      const toolMsg: ChatMessage = {
-        id: generateId(),
-        role: MessageRole.Tool,
-        content: res.content,
-        tool_call_id: res.tool_call_id,
-        timestamp: Date.now(),
-      };
-      this.messages.push(toolMsg);
+    // 把工具结果作为 Tool 消息加入（整体替换触发 UI 更新）
+    if (results.length > 0) {
+      let updated: ChatMessage[] = [...this.messages];
+      for (const res of results) {
+        updated.push({
+          id: generateId(),
+          role: MessageRole.Tool,
+          content: res.content,
+          tool_call_id: res.tool_call_id,
+          timestamp: Date.now(),
+        });
+      }
+      this.messages = updated;
     }
 
     this.statusText = '处理工具结果...';
@@ -301,7 +305,7 @@ export struct ChatPage {
       reasoning_content: '',
       timestamp: Date.now(),
     };
-    this.messages.push(finalAssistantMsg);
+    this.messages = [...this.messages, finalAssistantMsg];
     const finalIdx: number = this.messages.length - 1;
 
     const callbacks: StreamCallbacks = {

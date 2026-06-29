@@ -138,8 +138,8 @@ export class DeepSeekService {
         callbacks.onReasoning(reasoning);
       }
 
-      // 回调正文内容（一次性传出全文）
-      if (content && callbacks.onContent) {
+      // 回调正文内容（一次性传出全文，content 为空也回调以清空状态）
+      if (callbacks.onContent) {
         callbacks.onContent(content);
       }
 
