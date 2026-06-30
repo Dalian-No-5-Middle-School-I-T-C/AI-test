@@ -1,10 +1,10 @@
+import { Context } from '@kit.AbilityKit'
+import { preferences } from '@kit.ArkData'
+
 interface Prefs {
   putSync(key: string, value: string): void
   getSync(key: string, def: string): string
 }
-
-import { Context } from '@kit.AbilityKit'
-import { preferences } from '@kit.ArkData'
 
 const PREFS_NAME = 'ds_chat_prefs'
 

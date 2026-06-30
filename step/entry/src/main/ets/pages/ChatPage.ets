@@ -22,9 +22,15 @@ class ChatMsg {
 }
 
 class ChatConf {
-  model: string = 'deepseek-v4-flash'
-  thinkDepth: ThinkDepth = ThinkDepth.OFF
-  apiKey: string = ''
+  model: string
+  thinkDepth: ThinkDepth
+  apiKey: string
+
+  constructor(model: string = 'deepseek-v4-flash', thinkDepth: ThinkDepth = ThinkDepth.OFF, apiKey: string = '') {
+    this.model = model
+    this.thinkDepth = thinkDepth
+    this.apiKey = apiKey
+  }
 }
 
 @Entry
@@ -190,13 +196,13 @@ struct ChatPage {
     StorageUtil.saveApiKey(this.conf.apiKey)
     StorageUtil.saveModel(this.conf.model)
     const d = this.conf.thinkDepth
-    StorageUtil.saveThink(d === ThinkDepth.HIGH ? 'high' : d === ThinkDepth.MAX ? 'max' : 'off')
-    this.settingsOpen = false
+    StorageUtil.saveThink(d === ThinkDepth.HIGH ? 'high' : d === ThinkDepth.MAX ? 'max' : 'off');
+    this.settingsOpen = false;
   }
 
-  newChat(): void { if (this.streaming) { return } this.persist() this.newConversation() }
+  newChat(): void { if (this.streaming) { return } this.persist(); this.newConversation() }
 
-  clearChat(): void { if (this.streaming) { return } this.messages = [] this.persist() }
+  clearChat(): void { if (this.streaming) { return } this.messages = []; this.persist() }
 
   toggleReasoning(id: string): void {
     const arr = this.messages.slice(0)
