@@ -1,4 +1,4 @@
-import { PreferenceUtil } from './PreferenceUtil'
+﻿import { PreferenceUtil } from './PreferenceUtil'
 
 const PREF_API_KEY = 'deepseek_api_key'
 const PREF_MODEL = 'deepseek_model'

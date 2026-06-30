@@ -1,4 +1,4 @@
-import { Context } from '@kit.AbilityKit'
+﻿import { Context } from '@kit.AbilityKit'
 import { preferences } from '@kit.ArkData'
 
 const PREFS_NAME = 'ds_chat_prefs'

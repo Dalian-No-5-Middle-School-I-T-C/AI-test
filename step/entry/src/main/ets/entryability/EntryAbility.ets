@@ -1,4 +1,4 @@
-import { UIAbility } from '@kit.AbilityKit'
+﻿import { UIAbility } from '@kit.AbilityKit'
 import { PreferenceUtil } from '../utils/PreferenceUtil'
 
 export default class EntryAbility extends UIAbility {
