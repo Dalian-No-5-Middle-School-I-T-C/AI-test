@@ -1,4 +1,7 @@
-﻿import { Column, Row, Text, TextInput, Button, List, Blank, Divider, ScrollController, TextArea, Select, FlexAlign, Alignment, FontWeight, BarState, TextController, ScrollState } from '@kit.ArkUI'
+import { Column, Row, Text, TextInput, Button, List, Blank, Divider, ScrollController, TextArea, Select, FlexAlign, Alignment, FontWeight, BarState, TextController } from '@kit.ArkUI'
+import { DeepSeekApi } from '../service/DeepSeekApi'
+import { StorageUtil, ConvItem, MsgItem } from '../utils/StorageUtil'
+import { UserRole, ThinkDepth } from '../model/ChatModel'
 import { DeepSeekApi } from '../service/DeepSeekApi'
 import { StorageUtil, ConvItem, MsgItem } from '../utils/StorageUtil'
 import { UserRole, ThinkDepth } from '../model/ChatModel'
@@ -204,7 +207,7 @@ struct ChatPage {
     clearTimeout(this.timer)
     this.timer = setTimeout(() => {
       this.scroller.scrollToIndex(this.messages.length - 1)
-    }, 30) as unknown as number
+    }, 30) as Object
   }
 
   save(): void {
