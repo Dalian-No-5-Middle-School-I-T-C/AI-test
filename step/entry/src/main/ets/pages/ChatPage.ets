@@ -1,4 +1,4 @@
-import { Column, Row, Text, TextInput, Button, List, Blank, Divider, ScrollController, TextArea, Select, FlexAlign, Alignment, FontWeight, BarState, TextController, ScrollState } from '@kit.ArkUI'
+﻿import { Column, Row, Text, TextInput, Button, List, Blank, Divider, ScrollController, TextArea, Select, FlexAlign, Alignment, FontWeight, BarState, TextController, ScrollState } from '@kit.ArkUI'
 import { DeepSeekApi } from '../service/DeepSeekApi'
 import { StorageUtil, ConvItem, MsgItem } from '../utils/StorageUtil'
 import { UserRole, ThinkDepth } from '../model/ChatModel'
@@ -22,9 +22,9 @@ class ChatMsg {
 }
 
 class ChatConf {
-  model: string
-  thinkDepth: ThinkDepth
-  apiKey: string
+  model: string = 'deepseek-v4-flash'
+  thinkDepth: ThinkDepth = ThinkDepth.OFF
+  apiKey: string = ''
 }
 
 @Entry
@@ -33,7 +33,7 @@ struct ChatPage {
   @State messages: ChatMsg[] = []
   @State inputText: string = ''
   @State streaming: boolean = false
-  @State conf: ChatConf
+  @State conf: ChatConf = new ChatConf()
   @State title: string = ''
   @State convId: string = ''
   @State settingsOpen: boolean = false
@@ -46,7 +46,8 @@ struct ChatPage {
   aboutToAppear(): void {
     this.conf = new ChatConf()
     this.conf.model = StorageUtil.getModel()
-    this.conf.thinkDepth = StorageUtil.getThink() === 'high' ? ThinkDepth.HIGH : StorageUtil.getThink() === 'max' ? ThinkDepth.MAX : ThinkDepth.OFF
+    const think = StorageUtil.getThink()
+    this.conf.thinkDepth = think === 'high' ? ThinkDepth.HIGH : think === 'max' ? ThinkDepth.MAX : ThinkDepth.OFF
     this.conf.apiKey = StorageUtil.getApiKey()
     const convs = StorageUtil.getConvMap()
     if (convs.length === 0) {
@@ -61,7 +62,7 @@ struct ChatPage {
   newConversation(): void {
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7)
     this.convId = id
-    this.title = '新对话'
+    this.title = 'New Chat'
     this.messages = []
     const c0 = new ConvItem(id, this.title)
     const arr: ConvItem[] = []
@@ -136,7 +137,7 @@ struct ChatPage {
     const apiMsgs = this.buildApiMsgs()
     let buf = ''
 
-    await DeepSeekApi.chatStream(
+    DeepSeekApi.chatStream(
       this.conf.model,
       apiMsgs,
       this.conf.thinkDepth,
@@ -160,22 +161,16 @@ struct ChatPage {
     this.persist()
   }
 
-  buildApiMsgs(): any[] {
-    const out: any[] = []
+  buildApiMsgs(): string[] {
+    const out: string[] = []
     for (let i = 0; i < this.messages.length; i++) {
       const m = this.messages[i]
-      const o: any = {}
-      o.role = m.role
-      o.content = m.content
-      if (m.reasoningContent.length > 0) {
-        o.reasoning_content = m.reasoningContent
+      const role = m.role
+      const content = m.content
+      if (role.length > 0 && content.length > 0) {
+        out.push(role + '|' + content)
       }
-      out.push(o)
     }
-    const sys: any = {}
-    sys.role = 'system'
-    sys.content = 'You are a helpful assistant. 需要当前时间时调用 get_current_system_time。'
-    out.unshift(sys)
     return out
   }
 
@@ -257,9 +252,9 @@ struct ChatPage {
             .fontSize(17)
             .fontWeight(FontWeight.Bold)
             .layoutWeight(1)
-          Button('新建').fontSize(13).onClick(() => this.newChat())
-          Button('清除').fontSize(13).onClick(() => this.clearChat())
-          Button(this.settingsOpen ? '关闭' : '设置').fontSize(13).onClick(() => {
+          Button('New').fontSize(13).onClick(() => this.newChat())
+          Button('Clear').fontSize(13).onClick(() => this.clearChat())
+          Button(this.settingsOpen ? 'Close' : 'Settings').fontSize(13).onClick(() => {
             this.settingsOpen = !this.settingsOpen
           })
         }
@@ -270,7 +265,7 @@ struct ChatPage {
         if (this.settingsOpen) {
           Divider()
           Column() {
-            Text('会话历史').fontSize(15).fontWeight(FontWeight.Bold).width('100%').margin({ bottom: 6 })
+            Text('History').fontSize(15).fontWeight(FontWeight.Bold).width('100%').margin({ bottom: 6 })
             Scroll(this.rowScroll) {
               Row() {
                 ForEach(StorageUtil.getConvMap(), (c: ConvItem) => {
@@ -304,7 +299,7 @@ struct ChatPage {
                 this.conf.apiKey = v
               })
 
-            Text('模型').margin({ bottom: 4 }).fontSize(14)
+            Text('Model').margin({ bottom: 4 }).fontSize(14)
             Select([
               { value: 'deepseek-v4-flash', label: 'deepseek-v4-flash' },
               { value: 'deepseek-v4-pro', label: 'deepseek-v4-pro' },
@@ -318,11 +313,11 @@ struct ChatPage {
                 this.conf.apiKey = c.apiKey
               })
 
-            Text('思考模式').margin({ bottom: 4 }).fontSize(14)
+            Text('Think Mode').margin({ bottom: 4 }).fontSize(14)
             Select([
-              { value: ThinkDepth.OFF, label: '关闭' },
-              { value: ThinkDepth.HIGH, label: 'high' },
-              { value: ThinkDepth.MAX, label: 'max' },
+              { value: ThinkDepth.OFF, label: 'Off' },
+              { value: ThinkDepth.HIGH, label: 'High' },
+              { value: ThinkDepth.MAX, label: 'Max' },
             ])
               .value(this.conf.thinkDepth).width('100%').margin({ bottom: 10 })
               .onSelect((idx: number) => {
@@ -334,7 +329,7 @@ struct ChatPage {
                 this.conf.apiKey = c.apiKey
               })
 
-            Button('保存').fontSize(14).onClick(() => this.save())
+            Button('Save').fontSize(14).onClick(() => this.save())
           }
           .width('100%').padding(16).backgroundColor('#fafafa')
         }
@@ -360,7 +355,7 @@ struct ChatPage {
               } else {
                 Column() {
                   if (msg.reasoningContent.length > 0) {
-                    Text(msg.reasoningVisible ? '收起思维' : '展开思维')
+                    Text(msg.reasoningVisible ? 'Collapse' : 'Expand')
                       .fontSize(12).fontColor('#1565c0')
                       .onClick(() => this.toggleReasoning(msg.id))
                     if (msg.reasoningVisible) {
@@ -384,14 +379,14 @@ struct ChatPage {
         .width('100%')
 
         Row() {
-          TextArea({ placeholder: '输入消息...', controller: this.ctrl })
+          TextArea({ placeholder: 'Type message...', controller: this.ctrl })
             .placeholderColor('#aaaaaa').height(56).layoutWeight(1).maxLines(5).autoKeyboard(true)
             .margin({ right: 8 })
             .onChange((v: string) => {
               this.inputText = v
             })
 
-          Button(this.streaming ? '停止' : '发送')
+          Button(this.streaming ? 'Stop' : 'Send')
             .width(80).height(44).fontSize(14)
             .onClick(() => {
               if (this.streaming) {

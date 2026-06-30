@@ -4,13 +4,13 @@ import { preferences } from '@kit.ArkData'
 const PREFS_NAME = 'ds_chat_prefs'
 
 let ctx: Context | null = null
-let pref: any = null
+let pref: object | null = null
 
 export function setContext(c: Context): void {
   ctx = c
 }
 
-function getPref(): any {
+function getPref(): object {
   if (pref != null) {
     return pref
   }

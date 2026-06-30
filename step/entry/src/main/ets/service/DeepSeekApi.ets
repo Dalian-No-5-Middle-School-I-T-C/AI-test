@@ -1,122 +1,105 @@
-import { http, HttpResponse } from '@kit.NetworkKit'
+import { http } from '@kit.NetworkKit'
 import { StorageUtil } from '../utils/StorageUtil'
 
-const BASE_URL = 'https://api.deepseek.com'
-const CHAT_URL = BASE_URL + '/chat/completions'
+const CHAT_URL = 'https://api.deepseek.com/chat/completions'
 
-interface ReqOptions {
-  method: string
-  header: Record<string, string>
-  extraData: string
-  connectTimeout: number
-  readTimeout: number
-  usingCache: boolean
-}
-
-export class DeepSeekApi {
-  static async getModels(): Promise<string[]> {
+class DeepSeekApi {
+  static getModels(): string[] {
     return ['deepseek-v4-flash', 'deepseek-v4-pro']
   }
 
-  static async chatStream(
-    model: string,
-    messages: Object[],
-    thinkDepth: string,
-    onToken: (content: string, reasoning: string) => void,
-  ): Promise<void> {
-    const apiKey = StorageUtil.getApiKey()
-    const enableThinking = thinkDepth !== 'off'
-    const bodyObj: Record<string, Object> = {
-      model: model,
-      messages: messages,
-      stream: true,
-    }
-    if (enableThinking) {
-      bodyObj['thinking'] = { type: 'enabled' }
-      bodyObj['reasoning_effort'] = thinkDepth
-    }
-    bodyObj['tools'] = [
-      {
-        type: 'function',
-        function: {
-          name: 'get_current_system_time',
-          description: '获取当前手机系统时间',
-          parameters: { type: 'object', properties: {}, required: [] },
-        },
-      },
-    ]
+  static chatStream(model: string, messages: string[], thinkDepth: string, onToken: (content: string, reasoning: string) => void): void {
+    const body = new Object()
+    body['model'] = model
+    body['stream'] = true
+    body['reasoning_effort'] = thinkDepth
 
-    const bodyStr = JSON.stringify(bodyObj)
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      Authorization: 'Bearer ' + apiKey,
+    const msgsArr: Object[] = []
+    let i: number = 0
+    while (i < messages.length) {
+      const item: Record<string, string> = {}
+      const parts: string[] = messages[i].split('|')
+      item['role'] = parts[0]
+      item['content'] = parts[1]
+      msgsArr.push(item)
+      i = i + 1
     }
+    body['messages'] = msgsArr
 
-    let response: HttpResponse | null = null
-    try {
-      const req = http.createHttp()
-      const resp = await req.request(CHAT_URL, {
-        method: http.RequestMethod.POST,
-        header: headers,
-        extraData: bodyStr,
-        connectTimeout: 60000,
-        readTimeout: 120000,
-        usingCache: false,
-      } as any)
-      response = resp
-    } catch (e) {
-      return
-    }
+    const thinkingObj: Record<string, string> = {}
+    thinkingObj['type'] = 'enabled'
+    body['thinking'] = thinkingObj
 
-    if (!response || !response.result) {
-      return
-    }
+    const funcObj: Record<string, Object> = {}
+    funcObj['name'] = 'get_current_system_time'
+    funcObj['description'] = 'get current system time'
+    const paramsObj: Record<string, Object> = {}
+    paramsObj['type'] = 'object'
+    paramsObj['properties'] = new Object()
+    paramsObj['required'] = []
+    funcObj['parameters'] = paramsObj
+    const toolObj: Record<string, Object> = {}
+    toolObj['type'] = 'function'
+    toolObj['function'] = funcObj
+    const toolsArr: Object[] = []
+    toolsArr.push(toolObj)
+    body['tools'] = toolsArr
 
-    let buf = ''
-    const reader = response.result as any
-    while (true) {
-      const chunkObj = await reader.read(4096)
-      if (!chunkObj) break
-      const val = chunkObj.value
-      const finished = chunkObj.finished
-      if (typeof val === 'string') {
-        buf += val
+    const bodyStr: string = JSON.stringify(body)
+    const headers: Record<string, string> = {}
+    headers['Content-Type'] = 'application/json'
+    headers['Authorization'] = 'Bearer ' + StorageUtil.getApiKey()
+
+    const options: Object = new Object()
+    options['url'] = CHAT_URL
+    options['method'] = http.RequestMethod.POST as Object
+    options['header'] = headers
+    options['extraData'] = bodyStr
+    options['connectTimeout'] = 60000
+    options['readTimeout'] = 120000
+    options['usingCache'] = false
+
+    http.createHttp().request(CHAT_URL, options, (error: BusinessError, data: any) => {
+      if (error !== undefined && error !== null) {
+        return
       }
-      if (finished === true) break
-    }
-
-    try {
-      reader.release()
-    } catch (e) {}
-
-    let start = 0
-    const bufStr = buf as string
-    while (true) {
-      const idx = bufStr.indexOf('\n', start)
-      if (idx < 0) break
-      const line = bufStr.substring(start, idx).trim()
-      start = idx + 1
-      if (line.startsWith('data: ')) {
-        const data = line.substring(6)
-        if (data === '[DONE]') continue
-        try {
-          const parsed = JSON.parse(data)
-          const arr = parsed['choices']
-          if (arr && arr.length > 0) {
-            const delta = arr[0]['delta']
-            if (delta) {
-              const content = delta['content']
-              const reasoning = delta['reasoning_content']
-              if (typeof content === 'string' && content.length > 0) {
-                onToken(content, '')
+      if (!data || !data.result) {
+        return
+      }
+      const buf: ArrayBuffer = data.result as ArrayBuffer
+      const uint8: Uint8Array = new Uint8Array(buf)
+      const textContent: string = String.fromCharCode(...uint8)
+      const lines: string[] = textContent.split('\n')
+      let j: number = 0
+      while (j < lines.length) {
+        const line: string = lines[j]
+        if (line.startsWith('data: ')) {
+          const jsonStr: string = line.substring(6)
+          if (jsonStr.trim() !== '' && jsonStr !== '[DONE]') {
+            try {
+              const parsed: any = JSON.parse(jsonStr)
+              const choices: any[] = parsed['choices']
+              if (choices !== undefined && choices !== null && choices.length > 0) {
+                const delta: any = choices[0]['delta']
+                if (delta !== undefined && delta !== null) {
+                  const content: string = delta['content']
+                  const reasoning: string = delta['reasoning_content']
+                  if (content !== undefined && content !== null && content !== '') {
+                    onToken(content, '')
+                  }
+                  if (reasoning !== undefined && reasoning !== null && reasoning !== '') {
+                    onToken('', reasoning)
+                  }
+                }
               }
-              if (typeof reasoning === 'string' && reasoning.length > 0) {
-                onToken('', reasoning)
-              }
+            } catch (e) {
             }
           }
-        } catch (e) {}
+        }
+        j = j + 1
       }
-    }
+    })
   }
 }
+
+export { DeepSeekApi }
