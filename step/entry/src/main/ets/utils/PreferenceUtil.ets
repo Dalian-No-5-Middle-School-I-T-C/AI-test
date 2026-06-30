@@ -6,10 +6,6 @@ interface Prefs {
   getSync(key: string, def: string): string
 }
 
-interface PrefsOptions {
-  name: string
-}
-
 const PREFS_NAME = 'ds_chat_prefs'
 
 let ctx: Context | null = null
@@ -26,7 +22,7 @@ function getPref(): Prefs {
   if (ctx == null) {
     throw new Error('Context not set')
   }
-  const opts: PrefsOptions = { name: PREFS_NAME }
+  const opts: { name: string } = { name: PREFS_NAME }
   pref = preferences.getPreferencesSync(ctx, opts) as Prefs
   return pref
 }
