@@ -186,12 +186,11 @@ struct ChatPage {
     }
     return n
   }
-
   scroll(): void {
-    clearTimeout(this.timer)
-    this.timer = setTimeout(() => { this.scroller.scrollToIndex(this.messages.length - 1) }, 30) as Object
+    setTimeout(() => {
+      this.scroller.scrollToIndex(this.messages.length - 1)
+    }, 30)
   }
-
   save(): void {
     StorageUtil.saveApiKey(this.conf.apiKey)
     StorageUtil.saveModel(this.conf.model)

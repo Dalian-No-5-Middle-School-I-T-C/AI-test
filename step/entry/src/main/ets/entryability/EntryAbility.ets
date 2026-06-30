@@ -1,12 +1,12 @@
 ﻿import { UIAbility, Want, AbilityConstant } from '@kit.AbilityKit'
-import { PreferenceUtil } from '../utils/PreferenceUtil'
+import { setContext } from '../utils/PreferenceUtil'
 
 export default class EntryAbility extends UIAbility {
   onCreate(param1: Want, param2: AbilityConstant.LaunchParam): void {
-    PreferenceUtil.setContext(this.context)
+    setContext(this.context)
   }
 
-  onWindowStageCreate(windowStage): void {
+  onWindowStageCreate(windowStage: object): void {
     windowStage.loadContent('pages/ChatPage')
   }
 
