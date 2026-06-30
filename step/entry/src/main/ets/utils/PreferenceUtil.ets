@@ -1,23 +1,28 @@
+interface Prefs {
+  putSync(key: string, value: string): void
+  getSync(key: string, def: string): string
+}
+
 import { Context } from '@kit.AbilityKit'
 import { preferences } from '@kit.ArkData'
 
 const PREFS_NAME = 'ds_chat_prefs'
 
 let ctx: Context | null = null
-let pref: object | null = null
+let pref: Prefs | null = null
 
 export function setContext(c: Context): void {
   ctx = c
 }
 
-function getPref(): object {
+function getPref(): Prefs {
   if (pref != null) {
     return pref
   }
   if (ctx == null) {
     throw new Error('Context not set')
   }
-  pref = preferences.getPreferencesSync(ctx, PREFS_NAME)
+  pref = preferences.getPreferencesSync(ctx, PREFS_NAME) as Prefs
   return pref
 }
 

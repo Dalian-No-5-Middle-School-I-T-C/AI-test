@@ -1,7 +1,4 @@
-import { Column, Row, Text, TextInput, Button, List, Blank, Divider, ScrollController, TextArea, Select, FlexAlign, Alignment, FontWeight, BarState, TextController } from '@kit.ArkUI'
-import { DeepSeekApi } from '../service/DeepSeekApi'
-import { StorageUtil, ConvItem, MsgItem } from '../utils/StorageUtil'
-import { UserRole, ThinkDepth } from '../model/ChatModel'
+﻿import { Column, Row, Text, TextInput, Button, List, Blank, Divider, ScrollController, TextArea, Select, FlexAlign, Alignment, FontWeight, BarState, TextController } from '@kit.ArkUI'
 import { DeepSeekApi } from '../service/DeepSeekApi'
 import { StorageUtil, ConvItem, MsgItem } from '../utils/StorageUtil'
 import { UserRole, ThinkDepth } from '../model/ChatModel'
@@ -44,7 +41,7 @@ struct ChatPage {
   scroller: ScrollController = new ScrollController()
   rowScroll: ScrollController = new ScrollController()
   ctrl: TextController = new TextController()
-  timer: number = 0
+  timer: object = 0
 
   aboutToAppear(): void {
     this.conf = new ChatConf()
@@ -77,18 +74,22 @@ struct ChatPage {
   loadMessages(id: string): void {
     const list = StorageUtil.getMessages(id)
     const out: ChatMsg[] = []
-    for (let i = 0; i < list.length; i++) {
+    let i = 0
+    while (i < list.length) {
       const it = list[i]
       out.push(new ChatMsg(it.id, it.role, it.content, it.reasoning, false, it.timestamp))
+      i = i + 1
     }
     this.messages = out
   }
 
   persist(): void {
     const arr: MsgItem[] = []
-    for (let i = 0; i < this.messages.length; i++) {
+    let i = 0
+    while (i < this.messages.length) {
       const m = this.messages[i]
       arr.push(new MsgItem(m.id, m.role, m.content, m.reasoningContent, m.timestamp))
+      i = i + 1
     }
     StorageUtil.saveMessages(this.convId, arr)
     const convs: ConvItem[] = []
@@ -97,17 +98,14 @@ struct ChatPage {
   }
 
   switchConv(id: string): void {
-    if (this.streaming) {
-      return
-    }
+    if (this.streaming) { return }
     this.persist()
     this.convId = id
     const convs = StorageUtil.getConvMap()
-    for (let i = 0; i < convs.length; i++) {
-      if (convs[i].id === id) {
-        this.title = convs[i].title
-        break
-      }
+    let i = 0
+    while (i < convs.length) {
+      if (convs[i].id === id) { this.title = convs[i].title; break }
+      i = i + 1
     }
     this.loadMessages(id)
     this.settingsOpen = false
@@ -115,71 +113,51 @@ struct ChatPage {
 
   sendMessage(): void {
     const text = this.inputText.trim()
-    if (text.length === 0 || this.streaming) {
-      return
-    }
+    if (text.length === 0 || this.streaming) { return }
     this.inputText = ''
-    if (this.conf.apiKey.length === 0) {
-      return
-    }
+    if (this.conf.apiKey.length === 0) { return }
     const uid = Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
     const userMsg = new ChatMsg(uid, UserRole.USER, text, '', false, Date.now())
     this.messages = this.appendMsg(userMsg)
-
-    if (this.countUser() === 1) {
-      this.title = text.slice(0, 20)
-    }
+    if (this.countUser() === 1) { this.title = text.slice(0, 20) }
     this.persist()
-
     const aid = Date.now().toString(36)
     const bot = new ChatMsg(aid, UserRole.ASSISTANT, '', '', false, Date.now())
     const idx = this.messages.length
     this.messages = this.appendMsg(bot)
     this.streaming = true
-
     const apiMsgs = this.buildApiMsgs()
-    let buf = ''
-
-    DeepSeekApi.chatStream(
-      this.conf.model,
-      apiMsgs,
-      this.conf.thinkDepth,
-      (content: string, reasoning: string) => {
-        if (reasoning.length > 0) {
-          const cur = this.getMessage(idx)
-          const upd = new ChatMsg(cur.id, cur.role, cur.content, cur.reasoningContent + reasoning, cur.reasoningVisible, cur.timestamp)
-          this.setMessage(idx, upd)
-        }
-        if (content.length > 0) {
-          buf += content
-          const cur = this.getMessage(idx)
-          const upd = new ChatMsg(cur.id, cur.role, cur.content + content, cur.reasoningContent, cur.reasoningVisible, cur.timestamp)
-          this.setMessage(idx, upd)
-          this.scroll()
-        }
-      },
-    )
-
+    DeepSeekApi.chatStream(this.conf.model, apiMsgs, this.conf.thinkDepth, (content: string, reasoning: string) => {
+      if (reasoning.length > 0) {
+        const cur = this.getMessage(idx)
+        const upd = new ChatMsg(cur.id, cur.role, cur.content, cur.reasoningContent + reasoning, cur.reasoningVisible, cur.timestamp)
+        this.setMessage(idx, upd)
+      }
+      if (content.length > 0) {
+        const cur = this.getMessage(idx)
+        const upd = new ChatMsg(cur.id, cur.role, cur.content + content, cur.reasoningContent, cur.reasoningVisible, cur.timestamp)
+        this.setMessage(idx, upd)
+        this.scroll()
+      }
+    })
     this.streaming = false
     this.persist()
   }
 
   buildApiMsgs(): string[] {
     const out: string[] = []
-    for (let i = 0; i < this.messages.length; i++) {
+    let i = 0
+    while (i < this.messages.length) {
       const m = this.messages[i]
       const role = m.role
       const content = m.content
-      if (role.length > 0 && content.length > 0) {
-        out.push(role + '|' + content)
-      }
+      if (role.length > 0 && content.length > 0) { out.push(role + '|' + content) }
+      i = i + 1
     }
     return out
   }
 
-  getMessage(i: number): ChatMsg {
-    return this.messages[i]
-  }
+  getMessage(i: number): ChatMsg { return this.messages[i] }
 
   setMessage(i: number, m: ChatMsg): void {
     const arr = this.messages.slice(0)
@@ -195,19 +173,17 @@ struct ChatPage {
 
   countUser(): number {
     let n = 0
-    for (let i = 0; i < this.messages.length; i++) {
-      if (this.messages[i].role === UserRole.USER) {
-        n++
-      }
+    let i = 0
+    while (i < this.messages.length) {
+      if (this.messages[i].role === UserRole.USER) { n = n + 1 }
+      i = i + 1
     }
     return n
   }
 
   scroll(): void {
     clearTimeout(this.timer)
-    this.timer = setTimeout(() => {
-      this.scroller.scrollToIndex(this.messages.length - 1)
-    }, 30) as Object
+    this.timer = setTimeout(() => { this.scroller.scrollToIndex(this.messages.length - 1) }, 30) as Object
   }
 
   save(): void {
@@ -218,31 +194,21 @@ struct ChatPage {
     this.settingsOpen = false
   }
 
-  newChat(): void {
-    if (this.streaming) {
-      return
-    }
-    this.persist()
-    this.newConversation()
-  }
+  newChat(): void { if (this.streaming) { return } this.persist() this.newConversation() }
 
-  clearChat(): void {
-    if (this.streaming) {
-      return
-    }
-    this.messages = []
-    this.persist()
-  }
+  clearChat(): void { if (this.streaming) { return } this.messages = [] this.persist() }
 
   toggleReasoning(id: string): void {
     const arr = this.messages.slice(0)
-    for (let i = 0; i < arr.length; i++) {
+    let i = 0
+    while (i < arr.length) {
       if (arr[i].id === id) {
         const m = arr[i]
         const upd = new ChatMsg(m.id, m.role, m.content, m.reasoningContent, !m.reasoningVisible, m.timestamp)
         arr[i] = upd
         break
       }
+      i = i + 1
     }
     this.messages = arr
   }
@@ -251,19 +217,12 @@ struct ChatPage {
     Stack({ alignContent: Alignment.Bottom }) {
       Column() {
         Row() {
-          Text(this.title)
-            .fontSize(17)
-            .fontWeight(FontWeight.Bold)
-            .layoutWeight(1)
+          Text(this.title).fontSize(17).fontWeight(FontWeight.Bold).layoutWeight(1)
           Button('New').fontSize(13).onClick(() => this.newChat())
           Button('Clear').fontSize(13).onClick(() => this.clearChat())
-          Button(this.settingsOpen ? 'Close' : 'Settings').fontSize(13).onClick(() => {
-            this.settingsOpen = !this.settingsOpen
-          })
+          Button(this.settingsOpen ? 'Close' : 'Settings').fontSize(13).onClick(() => { this.settingsOpen = !this.settingsOpen })
         }
-        .width('100%')
-        .padding({ left: 12, right: 12, top: 10, bottom: 6 })
-        .backgroundColor('#f5f5f5')
+        .width('100%').padding({ left: 12, right: 12, top: 10, bottom: 6 }).backgroundColor('#f5f5f5')
 
         if (this.settingsOpen) {
           Divider()
@@ -276,20 +235,13 @@ struct ChatPage {
                     Text(c.title).fontSize(13).maxLines(1).padding({ left: 12, right: 12, top: 6, bottom: 6 })
                   }
                   .backgroundColor(c.id === this.convId ? '#bbdefb' : '#eeeeee')
-                  .borderRadius(16)
-                  .margin({ left: 4, right: 4 })
-                  .onClick(() => {
-                    if (c.id !== this.convId) {
-                      this.switchConv(c.id)
-                    }
-                  })
+                  .borderRadius(16).margin({ left: 4, right: 4 })
+                  .onClick(() => { if (c.id !== this.convId) { this.switchConv(c.id) } })
                 })
               }
-              .width('100%')
-              .space(6)
+              .width('100%').space(6)
             }
-            .width('100%')
-            .height(52)
+            .width('100%').height(52)
 
             Text('API Key').margin({ top: 10, bottom: 4 }).fontSize(14)
             TextInput({ placeholder: 'sk-...', text: this.conf.apiKey })
@@ -309,11 +261,7 @@ struct ChatPage {
             ])
               .value(this.conf.model).width('100%').margin({ bottom: 10 })
               .onSelect((idx: number) => {
-                const c = this.conf
-                this.conf = new ChatConf()
-                this.conf.model = idx === 0 ? 'deepseek-v4-flash' : 'deepseek-v4-pro'
-                this.conf.thinkDepth = c.thinkDepth
-                this.conf.apiKey = c.apiKey
+                this.conf = new ChatConf(idx === 0 ? 'deepseek-v4-flash' : 'deepseek-v4-pro', this.conf.thinkDepth, this.conf.apiKey)
               })
 
             Text('Think Mode').margin({ bottom: 4 }).fontSize(14)
@@ -325,11 +273,7 @@ struct ChatPage {
               .value(this.conf.thinkDepth).width('100%').margin({ bottom: 10 })
               .onSelect((idx: number) => {
                 const depths: ThinkDepth[] = [ThinkDepth.OFF, ThinkDepth.HIGH, ThinkDepth.MAX]
-                const c = this.conf
-                this.conf = new ChatConf()
-                this.conf.model = c.model
-                this.conf.thinkDepth = depths[idx]
-                this.conf.apiKey = c.apiKey
+                this.conf = new ChatConf(this.conf.model, depths[idx], this.conf.apiKey)
               })
 
             Button('Save').fontSize(14).onClick(() => this.save())
@@ -343,72 +287,40 @@ struct ChatPage {
           ForEach(this.messages, (msg: ChatMsg, index: number) => {
             ListItem() {
               if (msg.role === UserRole.USER) {
-                Row() {
-                  Text(msg.content).fontSize(15).maxLines(500).width('100%')
-                }
-                .width('78%')
-                .backgroundColor('#95ec69')
-                .borderRadius(16)
-                .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+                Row() { Text(msg.content).fontSize(15).maxLines(500).width('100%') }
+                .width('78%').backgroundColor('#95ec69').borderRadius(16).padding({ left: 12, right: 12, top: 8, bottom: 8 })
               } else if (msg.role === UserRole.SYSTEM) {
-                Row() {
-                  Text(msg.content).fontSize(12).fontColor('#888').maxLines(200).width('94%')
-                }
+                Row() { Text(msg.content).fontSize(12).fontColor('#888').maxLines(200).width('94%') }
                 .width('94%')
               } else {
                 Column() {
                   if (msg.reasoningContent.length > 0) {
-                    Text(msg.reasoningVisible ? 'Collapse' : 'Expand')
-                      .fontSize(12).fontColor('#1565c0')
-                      .onClick(() => this.toggleReasoning(msg.id))
+                    Text(msg.reasoningVisible ? 'Collapse' : 'Expand').fontSize(12).fontColor('#1565c0').onClick(() => this.toggleReasoning(msg.id))
                     if (msg.reasoningVisible) {
-                      Text(msg.reasoningContent).fontSize(13).fontColor('#555').maxLines(500)
-                        .padding(6).backgroundColor('#f9f9f9').borderRadius(6).width('100%')
+                      Text(msg.reasoningContent).fontSize(13).fontColor('#555').maxLines(500).padding(6).backgroundColor('#f9f9f9').borderRadius(6).width('100%')
                     }
                   }
-                  if (msg.content.length > 0) {
-                    Text(msg.content).fontSize(15).maxLines(1000).width('100%')
-                  }
+                  if (msg.content.length > 0) { Text(msg.content).fontSize(15).maxLines(1000).width('100%') }
                 }
-                .width('78%')
-                .borderRadius(16)
-                .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+                .width('78%').borderRadius(16).padding({ left: 12, right: 12, top: 8, bottom: 8 })
               }
             }
           })
         }
-        .scrollBar(BarState.Auto)
-        .layoutWeight(1)
-        .width('100%')
+        .scrollBar(BarState.Auto).layoutWeight(1).width('100%')
 
         Row() {
           TextArea({ placeholder: 'Type message...', controller: this.ctrl })
-            .placeholderColor('#aaaaaa').height(56).layoutWeight(1).maxLines(5).autoKeyboard(true)
-            .margin({ right: 8 })
-            .onChange((v: string) => {
-              this.inputText = v
-            })
-
-          Button(this.streaming ? 'Stop' : 'Send')
-            .width(80).height(44).fontSize(14)
-            .onClick(() => {
-              if (this.streaming) {
-                this.streaming = false
-              } else {
-                this.sendMessage()
-              }
-            })
+            .placeholderColor('#aaaaaa').height(56).layoutWeight(1).maxLines(5).autoKeyboard(true).margin({ right: 8 })
+            .onChange((v: string) => { this.inputText = v })
+          Button(this.streaming ? 'Stop' : 'Send').width(80).height(44).fontSize(14)
+            .onClick(() => { if (this.streaming) { this.streaming = false } else { this.sendMessage() } })
         }
-        .width('100%')
-        .padding({ left: 12, right: 12, top: 8, bottom: 10 })
-        .backgroundColor('#fafafa')
+        .width('100%').padding({ left: 12, right: 12, top: 8, bottom: 10 }).backgroundColor('#fafafa')
         .border({ width: { top: 0.5 } })
       }
-      .width('100%')
-      .height('100%')
+      .width('100%').height('100%')
     }
-    .width('100%')
-    .height('100%')
-    .backgroundColor('#ffffff')
+    .width('100%').height('100%').backgroundColor('#ffffff')
   }
 }

@@ -32,7 +32,7 @@ function buildToolObj(): Object {
   return tool
 }
 
-function buildRequestBody(model: string, messages: string[], thinkDepth: string): object {
+function buildRequestBody(model: string, messages: string[], thinkDepth: string, apiKey: string): Record<string, Object> {
   const body: Record<string, Object> = {}
   body['model'] = model
   body['messages'] = buildMsgArr(messages)
@@ -47,7 +47,7 @@ function buildRequestBody(model: string, messages: string[], thinkDepth: string)
   return body
 }
 
-function extractContent(payload: string, onToken: (content: string, reasoning: string) => void): void {
+function extractTokens(payload: string, onToken: (content: string, reasoning: string) => void): void {
   const key1 = '"content":"'
   const idx1 = payload.indexOf(key1)
   if (idx1 >= 0) {
@@ -74,9 +74,9 @@ export class DeepSeekApi {
   }
 
   static chatStream(model: string, messages: string[], thinkDepth: string, onToken: (content: string, reasoning: string) => void): void {
-    const body = buildRequestBody(model, messages, thinkDepth)
-    const bodyStr = JSON.stringify(body)
     const apiKey = StorageUtil.getApiKey()
+    const body = buildRequestBody(model, messages, thinkDepth, apiKey)
+    const bodyStr = JSON.stringify(body)
     const headers: Record<string, string> = {}
     headers['Content-Type'] = 'application/json'
     headers['Authorization'] = 'Bearer ' + apiKey
@@ -112,7 +112,7 @@ export class DeepSeekApi {
         if (line.startsWith('data: ')) {
           const payload: string = line.substring(6)
           if (payload.length > 0 && payload !== '[DONE]') {
-            extractContent(payload, onToken)
+            extractTokens(payload, onToken)
           }
         }
         j = j + 1

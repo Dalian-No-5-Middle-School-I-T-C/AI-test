@@ -6,7 +6,7 @@ export default class EntryAbility extends UIAbility {
     PreferenceUtil.setContext(this.context)
   }
 
-  onWindowStageCreate(windowStage: object): void {
+  onWindowStageCreate(windowStage): void {
     windowStage.loadContent('pages/ChatPage')
   }
 
