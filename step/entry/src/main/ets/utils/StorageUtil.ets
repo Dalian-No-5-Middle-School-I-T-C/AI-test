@@ -5,6 +5,8 @@ const PREF_MODEL = 'deepseek_model'
 const PREF_THINK = 'deepseek_think'
 const PREF_MAP = 'deepseek_map'
 const PREF_MSG_PREFIX = 'conv_msg_'
+const SEP = '|'
+const REC = '\n'
 
 export class ConvItem {
   id: string
@@ -58,12 +60,14 @@ export class StorageUtil {
   }
 
   static saveConvMap(items: ConvItem[]): void {
-    const arr: object[] = []
-    for (let i = 0; i < items.length; i++) {
-      arr.push(items[i])
+    let i = 0
+    const parts: string[] = []
+    while (i < items.length) {
+      const it = items[i]
+      parts.push(it.id + SEP + it.title)
+      i = i + 1
     }
-    const str = JSON.stringify(arr)
-    PreferenceUtil.setString(PREF_MAP, str)
+    PreferenceUtil.setString(PREF_MAP, parts.join(REC))
   }
 
   static getConvMap(): ConvItem[] {
@@ -71,36 +75,66 @@ export class StorageUtil {
     if (raw === '') {
       return []
     }
-    try {
-      const parsed = JSON.parse(raw)
-      const out: ConvItem[] = []
-      for (let i = 0; i < parsed.length; i++) {
-        const it = parsed[i]
-        out.push(new ConvItem(it['id'], it['title']))
+    const out: ConvItem[] = []
+    const records = raw.split(REC)
+    let i = 0
+    while (i < records.length) {
+      const rec = records[i]
+      if (rec.length === 0) {
+        i = i + 1
+        continue
       }
-      return out
-    } catch (err) {
-      return []
+      const idx = rec.indexOf(SEP)
+      if (idx < 0) {
+        i = i + 1
+        continue
+      }
+      const id = rec.substring(0, idx)
+      const title = rec.substring(idx + 1)
+      out.push(new ConvItem(id, title))
+      i = i + 1
     }
+    return out
   }
 
   static saveMessages(id: string, arr: MsgItem[]): void {
-    const str = JSON.stringify(arr)
-    PreferenceUtil.setString(PREF_MSG_PREFIX + id, str)
+    let i = 0
+    const parts: string[] = []
+    while (i < arr.length) {
+      const m = arr[i]
+      parts.push(m.id + SEP + m.role + SEP + m.content + SEP + m.reasoning + SEP + String(m.timestamp))
+      i = i + 1
+    }
+    PreferenceUtil.setString(PREF_MSG_PREFIX + id, parts.join(REC))
   }
 
   static getMessages(id: string): MsgItem[] {
-    const raw = PreferenceUtil.getString(PREF_MSG_PREFIX + id, '[]')
-    try {
-      const parsed = JSON.parse(raw)
-      const out: MsgItem[] = []
-      for (let i = 0; i < parsed.length; i++) {
-        const it = parsed[i]
-        out.push(new MsgItem(it['id'], it['role'], it['content'], it['reasoning'], it['timestamp']))
-      }
-      return out
-    } catch (err) {
+    const raw = PreferenceUtil.getString(PREF_MSG_PREFIX + id, '')
+    if (raw === '') {
       return []
     }
+    const out: MsgItem[] = []
+    const records = raw.split(REC)
+    let i = 0
+    while (i < records.length) {
+      const rec = records[i]
+      if (rec.length === 0) {
+        i = i + 1
+        continue
+      }
+      const parts: string[] = rec.split(SEP)
+      if (parts.length < 5) {
+        i = i + 1
+        continue
+      }
+      const itemId = parts[0]
+      const role = parts[1]
+      const content = parts[2]
+      const reasoning = parts[3]
+      const ts = Number(parts[4])
+      out.push(new MsgItem(itemId, role, content, reasoning, ts))
+      i = i + 1
+    }
+    return out
   }
 }

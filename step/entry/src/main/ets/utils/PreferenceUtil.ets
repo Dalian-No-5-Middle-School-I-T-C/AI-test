@@ -1,16 +1,16 @@
-﻿import { Context } from '@kit.AbilityKit'
-import { preferences } from '@kit.ArkData'
+import { Preferences } from '@kit.ArkData'
+import { Context } from '@kit.AbilityKit'
 
 const PREFS_NAME = 'ds_chat_prefs'
 
 let ctx: Context | null = null
-let pref: object | null = null
+let pref: Preferences | null = null
 
 export function setContext(c: Context): void {
   ctx = c
 }
 
-function getPref(): object {
+function getPref(): Preferences {
   if (pref != null) {
     return pref
   }

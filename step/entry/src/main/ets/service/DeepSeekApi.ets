@@ -9,96 +9,117 @@ class DeepSeekApi {
   }
 
   static chatStream(model: string, messages: string[], thinkDepth: string, onToken: (content: string, reasoning: string) => void): void {
-    const body = new Object()
-    body['model'] = model
-    body['stream'] = true
-    body['reasoning_effort'] = thinkDepth
-
-    const msgsArr: Object[] = []
-    let i: number = 0
-    while (i < messages.length) {
-      const item: Record<string, string> = {}
-      const parts: string[] = messages[i].split('|')
-      item['role'] = parts[0]
-      item['content'] = parts[1]
-      msgsArr.push(item)
-      i = i + 1
-    }
-    body['messages'] = msgsArr
-
-    const thinkingObj: Record<string, string> = {}
-    thinkingObj['type'] = 'enabled'
-    body['thinking'] = thinkingObj
-
-    const funcObj: Record<string, Object> = {}
-    funcObj['name'] = 'get_current_system_time'
-    funcObj['description'] = 'get current system time'
-    const paramsObj: Record<string, Object> = {}
-    paramsObj['type'] = 'object'
-    paramsObj['properties'] = new Object()
-    paramsObj['required'] = []
-    funcObj['parameters'] = paramsObj
-    const toolObj: Record<string, Object> = {}
-    toolObj['type'] = 'function'
-    toolObj['function'] = funcObj
-    const toolsArr: Object[] = []
-    toolsArr.push(toolObj)
-    body['tools'] = toolsArr
-
-    const bodyStr: string = JSON.stringify(body)
+    const body = this.buildBody(model, messages, thinkDepth)
+    const bodyStr = JSON.stringify(body)
+    const apiKey = StorageUtil.getApiKey()
     const headers: Record<string, string> = {}
     headers['Content-Type'] = 'application/json'
-    headers['Authorization'] = 'Bearer ' + StorageUtil.getApiKey()
+    headers['Authorization'] = 'Bearer ' + apiKey
 
-    const options: Object = new Object()
-    options['url'] = CHAT_URL
-    options['method'] = http.RequestMethod.POST as Object
-    options['header'] = headers
-    options['extraData'] = bodyStr
-    options['connectTimeout'] = 60000
-    options['readTimeout'] = 120000
-    options['usingCache'] = false
-
-    http.createHttp().request(CHAT_URL, options, (error: BusinessError, data: any) => {
+    http.createHttp().request(CHAT_URL, {
+      method: 'POST',
+      header: headers,
+      extraData: bodyStr,
+      connectTimeout: 60000,
+      readTimeout: 120000,
+      usingCache: false,
+    }, (error: object, data: object) => {
       if (error !== undefined && error !== null) {
         return
       }
-      if (!data || !data.result) {
+      if (!data) {
         return
       }
-      const buf: ArrayBuffer = data.result as ArrayBuffer
-      const uint8: Uint8Array = new Uint8Array(buf)
-      const textContent: string = String.fromCharCode(...uint8)
+      const raw = (data as any)['result']
+      if (!raw) {
+        return
+      }
+      const buf: ArrayBuffer = raw as ArrayBuffer
+      const uint8 = new Uint8Array(buf)
+      let textContent = ''
+      let i = 0
+      while (i < uint8.length) {
+        textContent = textContent + String.fromCharCode(uint8[i])
+        i = i + 1
+      }
       const lines: string[] = textContent.split('\n')
-      let j: number = 0
+      let j = 0
       while (j < lines.length) {
-        const line: string = lines[j]
+        const line: string = lines[j].trim()
         if (line.startsWith('data: ')) {
-          const jsonStr: string = line.substring(6)
-          if (jsonStr.trim() !== '' && jsonStr !== '[DONE]') {
-            try {
-              const parsed: any = JSON.parse(jsonStr)
-              const choices: any[] = parsed['choices']
-              if (choices !== undefined && choices !== null && choices.length > 0) {
-                const delta: any = choices[0]['delta']
-                if (delta !== undefined && delta !== null) {
-                  const content: string = delta['content']
-                  const reasoning: string = delta['reasoning_content']
-                  if (content !== undefined && content !== null && content !== '') {
-                    onToken(content, '')
-                  }
-                  if (reasoning !== undefined && reasoning !== null && reasoning !== '') {
-                    onToken('', reasoning)
-                  }
-                }
-              }
-            } catch (e) {
-            }
+          const payload: string = line.substring(6)
+          if (payload.length > 0 && payload !== '[DONE]') {
+            this.extractTokens(payload, onToken)
           }
         }
         j = j + 1
       }
     })
+  }
+
+  private static buildBody(model: string, messages: string[], thinkDepth: string): object {
+    const msgsArr: Object[] = []
+    let i = 0
+    while (i < messages.length) {
+      const segs: string[] = messages[i].split('|')
+      const entry: Record<string, string> = {}
+      entry['role'] = segs[0]
+      entry['content'] = segs[1]
+      msgsArr.push(entry)
+      i = i + 1
+    }
+    const thinkingOn = thinkDepth !== 'off'
+    if (thinkingOn) {
+      const fullBody: Record<string, Object> = {}
+      fullBody['model'] = model
+      fullBody['messages'] = msgsArr
+      fullBody['stream'] = true
+      fullBody['thinking'] = '{"type":"enabled"}'
+      fullBody['reasoning_effort'] = thinkDepth
+      fullBody['tools'] = [this.makeTool()]
+      return fullBody
+    } else {
+      const fullBody: Record<string, Object> = {}
+      fullBody['model'] = model
+      fullBody['messages'] = msgsArr
+      fullBody['stream'] = true
+      fullBody['tools'] = [this.makeTool()]
+      return fullBody
+    }
+  }
+
+  private static makeTool(): object {
+    const fn: Record<string, Object> = {}
+    fn['name'] = 'get_current_system_time'
+    fn['description'] = 'get current device time'
+    const params: Record<string, Object> = {}
+    params['type'] = 'object'
+    params['properties'] = new Object()
+    params['required'] = []
+    fn['parameters'] = params
+    const tool: Record<string, Object> = {}
+    tool['type'] = 'function'
+    tool['function'] = fn
+    return tool
+  }
+
+  private static extractTokens(payload: string, onToken: (content: string, reasoning: string) => void): void {
+    const contentIdx = payload.indexOf('"content":"')
+    if (contentIdx >= 0) {
+      const start = contentIdx + 11
+      const end = payload.indexOf('"', start)
+      if (end >= 0) {
+        onToken(payload.substring(start, end), '')
+      }
+    }
+    const reasonIdx = payload.indexOf('"reasoning_content":"')
+    if (reasonIdx >= 0) {
+      const start = reasonIdx + 22
+      const end = payload.indexOf('"', start)
+      if (end >= 0) {
+        onToken('', payload.substring(start, end))
+      }
+    }
   }
 }
 
