@@ -47,7 +47,7 @@ struct ChatPage {
   scroller: ScrollController = new ScrollController()
   rowScroll: ScrollController = new ScrollController()
   ctrl: TextController = new TextController()
-  timer: object = 0
+  timer: number = 0
 
   aboutToAppear(): void {
     this.conf = new ChatConf()
